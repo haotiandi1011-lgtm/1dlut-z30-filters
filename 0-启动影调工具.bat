@@ -1,9 +1,8 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
-if exist "dist\Z30å½±è°ƒå·¥å…·\Z30å½±è°ƒå·¥å…·.exe" (
-  start "" "dist\Z30å½±è°ƒå·¥å…·\Z30å½±è°ƒå·¥å…·.exe"
+if exist "dist\Z30Ó°µ÷¹¤¾ß\Z30Ó°µ÷¹¤¾ß.exe" (
+  start "" "dist\Z30Ó°µ÷¹¤¾ß\Z30Ó°µ÷¹¤¾ß.exe"
 ) else (
-  echo æœªæ‰¾åˆ°æ‰“åŒ…ç‰ˆï¼Œæ”¹ç”¨ Python å¯åŠ¨â€¦
-  call "å¯åŠ¨.cmd"
+  echo Packaged version not found, falling back to Python...
+  call "Æô¶¯.cmd"
 )
