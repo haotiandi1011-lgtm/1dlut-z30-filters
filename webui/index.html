@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Z30 影调工具</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#fff; --line:#e5e7eb; --text:#191c20; --muted:#6b7280;
+    --accent:#2563eb; --accent-soft:#eff4ff; --ok:#15803d; --warn:#b45309; --bad:#b91c1c;
+    --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 12px rgba(16,24,40,.05);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.55 -apple-system,"Segoe UI","Microsoft YaHei",system-ui,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:14px 22px;background:#fff;
+    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+  header h1{margin:0;font-size:16px;font-weight:650;letter-spacing:.2px}
+  header .sub{color:var(--muted);font-size:12.5px}
+  .pill{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12.5px;
+    padding:5px 11px;border-radius:999px;background:#f3f4f6;color:var(--muted)}
+  .pill.on{background:#ecfdf5;color:var(--ok)}
+  .pill.off{background:#fef2f2;color:var(--bad)}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+  main{display:grid;grid-template-columns:326px 1fr;gap:18px;padding:18px 22px 96px;max-width:1500px;margin:0 auto}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+  .card h2{margin:0;padding:13px 16px;font-size:13px;font-weight:650;color:#374151;
+    border-bottom:1px solid var(--line);letter-spacing:.3px}
+  .card .body{padding:16px}
+  label.fld{display:block;font-size:12px;color:var(--muted);margin:0 0 6px}
+  select,input[type=text],input[type=number]{width:100%;padding:8px 10px;border:1px solid var(--line);
+    border-radius:8px;background:#fff;font:inherit;color:inherit}
+  select:focus,input:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+  .drop{position:relative;border:1.5px dashed #cbd5e1;border-radius:10px;padding:20px 14px;text-align:center;
+    color:var(--muted);cursor:pointer;transition:.15s;background:#fafbfc}
+  .drop .x{position:absolute;top:6px;right:8px;width:22px;height:22px;line-height:20px;text-align:center;
+    border-radius:50%;color:#94a3b8;font-size:15px;cursor:pointer;display:none;user-select:none}
+  .drop .x:hover{background:#fee2e2;color:#b91c1c}
+  .drop.has .x{display:block}
+  .drop:hover,.drop.hot{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+  .drop b{display:block;color:var(--text);font-size:13px;margin-bottom:3px}
+  .drop.hot b{color:var(--accent)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chip{font-size:12px;padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:#fff;
+    cursor:pointer;color:#374151}
+  .chip:hover{border-color:var(--accent);color:var(--accent)}
+  .chip.sel{background:var(--accent);border-color:var(--accent);color:#fff}
+  .chip.user{border-style:dashed}
+  .chip.ncp{border-color:#d6b98c;background:#fdfaf4}
+  .chip.ncp:hover{border-color:var(--accent);color:var(--accent)}
+  .pgroup{width:100%;font-size:11px;font-weight:650;color:var(--muted);margin:12px 0 2px;letter-spacing:.4px}
+  .psub{width:100%;font-size:10.5px;color:#9aa2ad;margin:8px 0 0}
+  button{font:inherit;cursor:pointer;border-radius:9px;border:1px solid var(--line);background:#fff;padding:9px 14px}
+  button:hover{background:#f9fafb}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .btn-primary:hover{background:#1d4ed8}
+  .btn-primary:disabled{background:#c7d2fe;border-color:#c7d2fe;cursor:not-allowed}
+  .row{display:flex;gap:10px}
+  .row>*{flex:1}
+  .thumb{width:100%;border-radius:8px;border:1px solid var(--line);display:block;margin-top:8px;cursor:zoom-in}
+  #result .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    min-height:420px;color:var(--muted);gap:8px;text-align:center;padding:30px}
+  #result .empty svg{opacity:.35}
+  .verdict{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:10px;margin-bottom:16px}
+  .verdict.ok{background:#f0fdf4;border:1px solid #bbf7d0}
+  .verdict.caution{background:#fffbeb;border:1px solid #fde68a}
+  .verdict.no{background:#fef2f2;border:1px solid #fecaca}
+  .verdict .lbl{font-weight:650;font-size:14px}
+  .verdict.ok .lbl{color:var(--ok)} .verdict.caution .lbl{color:var(--warn)} .verdict.no .lbl{color:var(--bad)}
+  .verdict .txt{font-size:12.5px;color:#4b5563;margin-top:2px}
+  .de{font-variant-numeric:tabular-nums;font-size:26px;font-weight:700;letter-spacing:-.5px}
+  .de small{font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:4px 0 16px}
+  .stat{background:#fafbfc;border:1px solid var(--line);border-radius:9px;padding:9px 11px}
+  .stat .k{font-size:11px;color:var(--muted)}
+  .stat .v{font-size:16px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:1px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:500}
+  td.n{font-variant-numeric:tabular-nums}
+  .tag{font-size:11px;padding:2px 7px;border-radius:999px;background:#eef2f6;color:#475569}
+  .tag.best{background:#dcfce7;color:#15803d}
+  footer{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+    padding:11px 22px;display:flex;align-items:center;gap:12px;z-index:30;box-shadow:0 -2px 10px rgba(16,24,40,.04)}
+  .slots{display:flex;gap:5px;align-items:center;flex:0 0 auto}
+  .slot{flex:0 0 auto;width:42px;height:40px;border:1px solid var(--line);border-radius:8px;background:#fff;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;line-height:1.15;
+    align-self:center;overflow:hidden}
+  .slot .sn{font-size:11.5px;font-weight:650}
+  .slot .st{font-size:9px;color:var(--muted);max-width:38px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slot:hover{border-color:var(--accent)}
+  .slot.sel{border-color:var(--accent);background:var(--accent);box-shadow:0 2px 8px rgba(37,99,235,.28)}
+  .slot.sel .sn,.slot.sel .st{color:#fff}
+  .slot.full .st{color:var(--ok)} .slot.params .st{color:var(--warn)}
+  footer .name{width:170px;flex:0 0 auto}
+  footer button{white-space:nowrap;flex:0 0 auto}
+  #footinfo{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 auto}
+  #toast{position:fixed;right:18px;bottom:74px;display:flex;flex-direction:column;gap:8px;z-index:60}
+  .tst{background:#111827;color:#fff;padding:10px 14px;border-radius:9px;font-size:13px;
+    box-shadow:0 8px 24px rgba(0,0,0,.2);animation:in .18s ease-out;max-width:380px}
+  .tst.err{background:#b91c1c} .tst.ok{background:#15803d}
+  @keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .modal{position:fixed;inset:0;background:rgba(17,24,39,.42);display:none;align-items:center;
+    justify-content:center;z-index:80;padding:20px}
+  .modal.show{display:flex}
+  .modal .box{background:#fff;border-radius:14px;max-width:430px;width:100%;padding:22px;
+    box-shadow:0 20px 50px rgba(0,0,0,.25)}
+  .modal h3{margin:0 0 10px;font-size:15px}
+  .modal p{margin:0 0 10px;color:#4b5563;font-size:13px}
+  .modal .warn{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;
+    font-size:12.5px;color:#92400e;margin-bottom:14px}
+  .modal .acts{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+  .pblock{margin:14px 0 2px;padding:11px 13px;background:#f8fafc;border:1px solid var(--line);border-radius:9px}
+  .phead{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--text);cursor:pointer}
+  .prow{display:flex;align-items:center;gap:9px;margin-top:10px}
+  .prow .pk{width:46px;font-size:12px;color:var(--muted);flex:0 0 auto}
+  .prow input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
+  .prow .pv{width:42px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;flex:0 0 auto}
+  .pblock.off .prow{opacity:.4;pointer-events:none}
+  .muted{color:var(--muted)} .small{font-size:12px}
+  .spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;
+    border-radius:50%;display:inline-block;animation:sp .7s linear infinite;vertical-align:-2px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .zoom{position:fixed;inset:0;background:rgba(11,15,25,.88);display:none;align-items:center;
+    justify-content:center;z-index:90;padding:24px;cursor:zoom-out}
+  .zoom.show{display:flex}
+  .zoom img{max-width:96%;max-height:96%;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .banner{background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:10px 14px;border-radius:10px;
+    font-size:12.5px;margin-bottom:14px;display:none}
+  .banner.show{display:block}
+  #curve{width:100%;height:150px;display:block;border-radius:8px;background:#fafbfc;border:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Z30 影调工具</h1>
+  <span class="sub">把影调参考写进机身 C1–C9</span>
+  <span class="pill" id="campill"><i class="dot"></i><span>检测相机…</span></span>
+</header>
+
+<main>
+  <div style="display:flex;flex-direction:column;gap:18px">
+    <section class="card">
+      <h2>1 · 选择参考</h2>
+      <div class="body">
+        <div class="drop" id="drop">
+          <span class="x" id="clear1" title="移除这个文件">×</span>
+          <b id="d1t">拖一个 .cube，或一张照片进来</b>
+          <span class="small" id="d1s">或点击选择（1D / 3D LUT、.np3，或一张参考图）</span>
+        </div>
+        <div class="drop" id="drop2" style="display:none;margin-top:10px">
+          <span class="x" id="clear2" title="移除目标图">×</span>
+          <b id="d2t">再放一张「目标图」（可选）</b>
+          <span class="small" id="d2s">同一场景的另一个版本。放了就走成对图模式，能给真正的 ΔE</span>
+        </div>
+        <input type="file" id="file" accept=".cube,.np3,.z30,.jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff" hidden>
+        <input type="file" id="file2" accept=".jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff" hidden>
+        <div class="chips" id="samples"></div>
+        <p class="small muted" id="samplenote" style="margin:8px 0 0">
+          内置示例是公式合成的测试样本，只用来熟悉功能，不是真实胶片。
+        </p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>2 · 预设库</h2>
+      <div class="body">
+        <div class="chips" id="presets" style="max-height:360px;overflow:auto"></div>
+        <p class="small muted" id="presetnote" style="margin:8px 0 0"></p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3 · 拟合设置</h2>
+      <div class="body">
+        <label class="fld">策略</label>
+        <select id="mode">
+          <option value="auto">自动择优（推荐）</option>
+          <option value="neutral">中性轴拟合</option>
+          <option value="channels">全通道最小二乘</option>
+          <option value="hybrid">中性加权混合</option>
+        </select>
+        <p class="small muted" id="modehint" style="margin:7px 0 0;min-height:34px"></p>
+        <div style="height:12px"></div>
+        <label class="fld">样条节点数 <span class="muted" id="knotsv">33</span></label>
+        <input type="range" id="knots" min="9" max="65" step="2" value="33" style="width:100%">
+        <p class="small muted" style="margin:6px 0 0">
+          样条节点越多越拟合，但是成功率会降低；初始 33 可适应大多情况，也可自行视情况调节。
+        </p>
+        <div style="height:14px"></div>
+        <button class="btn-primary" id="fitbtn" style="width:100%" disabled>开始拟合</button>
+        <p class="small muted" style="margin:10px 0 0">拟合是纯离线计算，不碰相机。</p>
+      </div>
+    </section>
+  </div>
+
+  <section class="card" id="resultcard">
+    <h2>4 · 结果与写入</h2>
+    <div class="body" id="result">
+      <div class="empty">
+        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+          <path d="M3 17V7a2 2 0 0 1 2-2h9l7 7v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>
+          <path d="M14 5v7h7"/><circle cx="8.5" cy="14.5" r="1.6"/>
+        </svg>
+        <div style="font-weight:600;color:#374151">还没有结果</div>
+        <div class="small">左边选一个参考，点「开始拟合」</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span class="small muted" style="white-space:nowrap">写入目标</span>
+  <div class="slots" id="slots"></div>
+  <div class="name">
+    <input type="text" id="pcname" placeholder="名称（英文/数字，≤19）" maxlength="19" value="Z30FIT"
+           title="机身只认 ASCII：中文和符号会被剔掉">
+  </div>
+  <button class="btn-primary" id="writebtn" disabled>写入 C9</button>
+  <button id="rollbackbtn" title="把选中槽位恢复到最近一次写入前的状态">回滚</button>
+  <span class="small muted" id="footinfo"></span>
+</footer>
+
+<div id="toast"></div>
+<div class="zoom" id="zoom"><img id="zoomi" alt=""></div>
+<div class="modal" id="modal">
+  <div class="box">
+    <h3 id="mtitle">确认写入</h3>
+    <div class="warn" id="mwarn"></div>
+    <p id="mtext"></p>
+
+    <div class="pblock" id="pblock">
+      <label class="phead"><input type="checkbox" id="puse" checked> 同时写入参数（锐化 / 清晰度 / 饱和度）</label>
+      <div class="prow">
+        <span class="pk">锐化</span>
+        <input type="range" id="psharp" min="-3" max="9" step="0.25" value="0">
+        <span class="pv" id="psharpv">0</span>
+      </div>
+      <div class="prow">
+        <span class="pk">清晰度</span>
+        <input type="range" id="pclarity" min="-5" max="5" step="0.25" value="0">
+        <span class="pv" id="pclarityv">0</span>
+      </div>
+      <div class="prow">
+        <span class="pk">饱和度</span>
+        <input type="range" id="psat" min="-3" max="3" step="0.25" value="0">
+        <span class="pv" id="psatv">0</span>
+      </div>
+      <div class="small muted" style="margin-top:8px" id="pnote">
+        曲线负责影调，这三项负责锐度和色彩浓度。不勾选则只写曲线。
+      </div>
+    </div>
+
+    <div class="acts">
+      <button id="mcancel">取消</button>
+      <button class="btn-primary" id="mok">确认写入</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const S = { src:null, target:null, record:null, slot:'C9', slots:[] };
+let EMPTY_HTML = '';
+const D1_DEFAULT = ['拖一个 .cube，或一张照片进来', '或点击选择（1D / 3D LUT、.np3，或一张参考图）'];
+const D2_DEFAULT = ['再放一张「目标图」（可选）', '同一场景的另一个版本。放了就走成对图模式，能给真正的 ΔE'];
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s??'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function toast(msg, kind=''){
+  const el = document.createElement('div');
+  el.className = 'tst ' + kind; el.textContent = msg;
+  $('#toast').appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='.3s'; setTimeout(()=>el.remove(),300); }, kind==='err'?6000:3200);
+}
+function api(path, opt){ return fetch(path, opt).then(r=>r.json()); }
+
+async function downloadFile(url, filename, okMsg){
+  try{
+    const r = await fetch(url);
+    if(!r.ok){
+      let msg = '导出失败';
+      try{ const d = await r.json(); msg = d.message || msg; }catch(e){}
+      return toast(msg, 'err');
+    }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(a.href), 3000);
+    toast(okMsg, 'ok');
+  }catch(e){ toast('导出出错：'+e.message, 'err'); }
+}
+
+function exportRecipe(){
+  if(!S.record) return toast('先拟合一个参考','err');
+  const n = ($('#pcname').value || 'Z30FIT').trim() || 'Z30FIT';
+  const q = new URLSearchParams({token:S.record.token, name:n});
+  downloadFile('/api/recipe?' + q.toString(), n + '.z30', '配方包已开始下载');
+}
+
+
+function resetResult(){
+  S.record = null;
+  const wb = $('#writebtn');
+  if(wb){ wb.disabled = true; wb.textContent = '写入 ' + S.slot; }
+  if(EMPTY_HTML) $('#result').innerHTML = EMPTY_HTML;
+}
+
+function clearSource(){
+  S.src = null; S.target = null;
+  $('#fitbtn').disabled = true;
+  $('#d1t').textContent = D1_DEFAULT[0];
+  $('#d1s').textContent = D1_DEFAULT[1];
+  $('#drop').classList.remove('has','hot');
+  $('#drop2').style.display = 'none';
+  $('#drop2').classList.remove('has','hot');
+  $('#d2t').textContent = D2_DEFAULT[0];
+  $('#d2s').textContent = D2_DEFAULT[1];
+  $('#file').value = ''; $('#file2').value = '';
+  resetResult();
+  toast('已移除，可以重新选择');
+}
+
+function clearTarget(){
+  S.target = null;
+  $('#d2t').textContent = D2_DEFAULT[0];
+  $('#d2s').textContent = D2_DEFAULT[1];
+  $('#drop2').classList.remove('has','hot');
+  $('#file2').value = '';
+  resetResult();
+  toast('已移除目标图，回到单图模式');
+}
+
+const MODE_HINT = {
+  auto:     '三种里自动挑一个：先筛掉会把灰阶搞歪的，再比整体误差。不知道选哪个就用它。',
+  neutral:  '只保证灰阶准。彩色会偏，但黑位不会飞。大多数胶片曲线、低反差、褪色都用这个。',
+  channels: '彩色像素也一起参与计算。平均误差可能更低，但黑位容易被抬高、暗部发灰。',
+  hybrid:   '灰阶和彩色各让一步。两头都不极致，想兼顾又不敢冒险时用。',
+};
+
+function updateModeHint(){
+  const el = $('#modehint');
+  if(el) el.textContent = MODE_HINT[$('#mode').value] || '';
+}
+$('#mode').onchange = updateModeHint;
+
+// ---------- 样本 ----------
+async function loadSamples(){
+  const d = await api('/api/samples');
+  const box = $('#samples');
+  box.innerHTML = '';
+  const note = document.getElementById('samplenote');
+  if(note && d.note) note.textContent = d.note;
+  (d.samples||[]).forEach(s=>{
+    const b = document.createElement('span');
+    b.className = 'chip'; b.textContent = s.label || s.name.replace(/\.cube$/,'');
+    b.title = s.name;
+    b.onclick = ()=>{
+      [...box.children].forEach(c=>c.classList.remove('sel'));
+      b.classList.add('sel');
+      S.src = 'sample:' + s.name;
+      S.target = null;
+      $('#fitbtn').disabled = false;
+      $('#d1t').textContent = '已选内置示例';
+      $('#d1s').textContent = s.label || s.name;
+      $('#drop').classList.add('has');
+      $('#drop2').style.display = 'none';
+      $('#drop2').classList.remove('has','hot');
+      resetResult();
+    };
+    box.appendChild(b);
+  });
+}
+
+// ---------- 上传 ----------
+$('#drop').onclick = ()=> $('#file').click();
+$('#drop2').onclick = ()=> $('#file2').click();
+$('#file2').onchange = e => { if(e.target.files[0]) uploadTarget(e.target.files[0]); };
+$('#clear1').onclick = e => { e.stopPropagation(); clearSource(); };
+$('#clear2').onclick = e => { e.stopPropagation(); clearTarget(); };
+$('#file').onchange = e => { if(e.target.files[0]) upload(e.target.files[0]); };
+['dragenter','dragover'].forEach(ev=>$('#drop').addEventListener(ev,e=>{e.preventDefault();$('#drop').classList.add('hot')}));
+['dragleave','drop'].forEach(ev=>$('#drop').addEventListener(ev,e=>{e.preventDefault();$('#drop').classList.remove('hot')}));
+$('#drop').addEventListener('drop', e=>{ const f=e.dataTransfer.files[0]; if(f) upload(f); });
+
+async function upload(file){
+  if(!/\.(cube|np3|z30|jpe?g|png|webp|bmp|tiff?)$/i.test(file.name)) return toast('支持 .cube / .np3 / .z30 / 图片','err');
+  const r = await fetch('/api/upload?name='+encodeURIComponent(file.name), {method:'POST', body:file});
+  const d = await r.json();
+  if(!d.ok) return toast(d.message||'上传失败','err');
+  S.src = 'upload:' + d.name;
+  $('#fitbtn').disabled = false;
+  $('#d1t').textContent = '已选择文件';
+  $('#d1s').textContent = d.name + ' · ' + (d.size/1024).toFixed(1) + ' KB';
+  $('#drop').classList.add('has');
+  if(/\.(jpe?g|png|webp|bmp|tiff?)$/i.test(d.name)) $('#drop2').style.display = 'block';
+  resetResult();
+  toast('已载入 '+d.name);
+}
+
+async function uploadTarget(file){
+  if(!/\.(jpe?g|png|webp|bmp|tiff?)$/i.test(file.name)) return toast('目标图只支持图片','err');
+  const r = await fetch('/api/upload?name='+encodeURIComponent('t_'+file.name), {method:'POST', body:file});
+  const d = await r.json();
+  if(!d.ok) return toast(d.message||'上传失败','err');
+  S.target = 'upload:' + d.name;
+  $('#d2t').textContent = '已选目标图';
+  $('#d2s').textContent = d.name + '　·　成对图模式：给真正的 ΔE';
+  $('#drop2').classList.add('has');
+  resetResult();
+  toast('已载入目标图');
+}
+
+// ---------- 拟合 ----------
+$('#knots').oninput = e => $('#knotsv').textContent = e.target.value;
+$('#fitbtn').onclick = async ()=>{
+  if(!S.src) return;
+  const btn = $('#fitbtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 拟合中…';
+  try{
+    const q = new URLSearchParams({src:S.src, mode:$('#mode').value, knots:$('#knots').value});
+    if(S.target) q.set('target', S.target);
+    const d = await api('/api/fit?'+q.toString(), {method:'POST'});
+    if(!d.ok){ toast(d.message||'拟合失败','err'); return; }
+    S.record = d;
+    render(d);
+    $('#writebtn').disabled = false;
+    $('#writebtn').textContent = '写入 ' + S.slot;
+    suggestName(d.name);
+  }catch(e){ toast('拟合出错：'+e.message,'err'); }
+  finally{ btn.disabled=false; btn.textContent='开始拟合'; }
+};
+
+function suggestName(n){
+  let s = (n||'Z30FIT').toUpperCase().replace(/[^A-Z0-9\-_]/g,'').slice(0,19);
+  if(!s) s = 'Z30FIT';
+  $('#pcname').value = s;
+}
+
+// ---------- 渲染 ----------
+function render(d){
+  if(d.kind === 'preset') return renderPreset(d);
+  if(d.kind === 'recipe') return renderRecipe(d);
+  if(d.kind === 'pair') return renderPair(d);
+  if(d.kind === 'image') return renderImage(d);
+  const m = d.metrics, t = d.tone, b = d.banding;
+  const adv = d.advice;
+  const cand = (d.candidates||[]).map(c=>`
+    <tr><td>${esc(c.label)}${c.mode===d.mode?' <span class="tag best">采用</span>':''}</td>
+        <td class="n">${c.mean.toFixed(2)}</td><td class="n">${c.p95.toFixed(2)}</td>
+        <td class="n">${(c.gray_dev*100).toFixed(1)}%</td></tr>`).join('');
+
+  const band = b.monotone && !(b.artifact_flats||[]).length
+    ? '<span style="color:#15803d">✅ 无断层</span>'
+    : '<span style="color:#b91c1c">⚠ 有塌陷，建议调节点数重拟合</span>';
+
+  $('#result').innerHTML = `
+    <div class="verdict ${adv.level}">
+      <div>
+        <div class="lbl">${adv.level==='ok'?'建议写入':adv.level==='caution'?'谨慎写入':'不建议写入'}</div>
+        <div class="txt">${esc(adv.text)}</div>
+      </div>
+    </div>
+
+    <div class="row" style="align-items:flex-end;margin-bottom:14px">
+      <div>
+        <div class="de">${m.mean.toFixed(2)} <small>ΔE 平均</small></div>
+        <div class="small muted" style="margin-top:2px">${esc(d.verdict)}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="small muted">P95 ${m.p95.toFixed(2)} · 最大 ${m.max.toFixed(2)}</div>
+        <div class="small muted">≤2.0 的点：${(m.within_2*100).toFixed(0)}%</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="stat"><div class="k">黑位</div><div class="v">${(t.black*100).toFixed(1)}%</div></div>
+      <div class="stat"><div class="k">白位</div><div class="v">${(t.white*100).toFixed(1)}%</div></div>
+      <div class="stat"><div class="k">中间调对比</div><div class="v">${t.contrast_25_75.toFixed(2)}×</div></div>
+      <div class="stat"><div class="k">逐通道 RMSE</div><div class="v" style="font-size:13px">${m.rmse_r.toFixed(1)}/${m.rmse_g.toFixed(1)}/${m.rmse_b.toFixed(1)}</div></div>
+    </div>
+
+    <div class="row" style="margin-bottom:16px">
+      <div>
+        <label class="fld">拟合出的曲线</label>
+        <canvas id="curve" width="640" height="150"></canvas>
+      </div>
+      <div style="max-width:230px">
+        <label class="fld">断层检测</label>
+        <div class="small">${band}</div>
+        <div class="small muted" style="margin-top:6px">最长塌陷 ${b.max_flat_run} 步 · 8 位可用码值 ${b.distinct_codes}/256</div>
+        <div class="small muted">灰阶偏离 ${(m.gray_dev*100).toFixed(1)}%</div>
+      </div>
+    </div>
+
+    <label class="fld">视觉对比（点图放大）</label>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <img class="thumb" src="${d.previews.chart}" data-zoom alt="色卡对比">
+      <img class="thumb" src="${d.previews.scene}" data-zoom alt="风景对比">
+      <img class="thumb" src="${d.previews.gradient}" data-zoom alt="渐变对比">
+    </div>
+
+    <div style="margin-top:16px">
+      <label class="fld">策略对比</label>
+      <table><thead><tr><th>策略</th><th>ΔE 平均</th><th>P95</th><th>灰阶偏离</th></tr></thead>
+      <tbody>${cand}</tbody></table>
+    </div>
+
+    <p class="small muted" style="margin-top:14px">
+      ${d.lut_kind} · 来源 ${esc(d.source)} · 用时 ${d.elapsed ?? '?'}s
+      ${d.report_url?` · <a href="${d.report_url}" target="_blank">完整报告</a>`:''}
+      · <a href="#" onclick="exportRecipe();return false;">⬇ 导出配方包 (.z30)</a>
+      · <a href="#" onclick="savePreset();return false;">保存为预设</a>
+    </p>`;
+
+  drawCurve(d.curve);
+  document.querySelectorAll('[data-zoom]').forEach(img=>{
+    img.onclick = ()=>{ $('#zoomi').src = img.src; $('#zoom').classList.add('show'); };
+  });
+  $('#resultcard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function fmtParams(p){
+  if(!p) return '';
+  const m = {sat:'饱和', sharp:'锐化', contrast:'对比', bright:'亮度', clarity:'清晰度'};
+  const parts = [];
+  for(const k in m){ const v = p[k]; if(v) parts.push(m[k] + (v>0?'+':'') + v); }
+  return parts.join('、');
+}
+
+function renderPreset(d){
+  const t = d.tone, b = d.banding;
+  const band = b.monotone && !(b.artifact_flats||[]).length
+    ? '<span style="color:#15803d">✅ 无断层</span>' : '<span style="color:#b91c1c">⚠ 有塌陷</span>';
+  const ptext = fmtParams(d.params);
+  const paramNote = (ptext || d.base)
+    ? `<div class="banner show" style="margin-top:12px">
+        原配方参数：${esc(ptext || '无额外参数')}${d.base?('　·　基础校准 ' + esc(d.base)):''}
+        <br>写入时会和曲线一起写进机身，可在写入前的弹窗里调整。
+      </div>`
+    : '';
+
+  $('#result').innerHTML = `
+    <div class="verdict ok">
+      <div><div class="lbl">预设已载入 · ${esc(d.name)}</div>
+      <div class="txt">${esc(d.source)}</div></div>
+    </div>
+    ${paramNote}
+    <div class="grid">
+      <div class="stat"><div class="k">黑位</div><div class="v">${(t.black*100).toFixed(1)}%</div></div>
+      <div class="stat"><div class="k">白位</div><div class="v">${(t.white*100).toFixed(1)}%</div></div>
+      <div class="stat"><div class="k">中间调对比</div><div class="v">${t.contrast_25_75.toFixed(2)}×</div></div>
+      <div class="stat"><div class="k">断层</div><div class="v" style="font-size:13px">${band}</div></div>
+    </div>
+    <div class="row" style="align-items:flex-start">
+      <div>
+        <label class="fld">曲线</label>
+        <canvas id="curve" width="640" height="150"></canvas>
+      </div>
+    </div>
+    <label class="fld" style="margin-top:16px">这条曲线作用在标准测试图上</label>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <img class="thumb" src="${d.previews.chart}" data-zoom>
+      <img class="thumb" src="${d.previews.scene}" data-zoom>
+      <img class="thumb" src="${d.previews.gradient}" data-zoom>
+    </div>
+    <p class="small muted" style="margin-top:12px">
+      <a href="#" onclick="exportRecipe();return false;">⬇ 导出配方包 (.z30)</a>
+      · <a href="#" onclick="savePreset();return false;">保存为预设</a>
+    </p>`;
+  drawCurve(d.curve);
+  document.querySelectorAll('[data-zoom]').forEach(img=>{
+    img.onclick = ()=>{ $('#zoomi').src = img.src; $('#zoom').classList.add('show'); };
+  });
+  $('#resultcard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+async function loadPresets(){
+  let d; try{ d = await api('/api/presets'); }catch(e){ return; }
+  const box = $('#presets'); box.innerHTML = '';
+  if(d.note) $('#presetnote').textContent = d.note;
+  const ps = d.presets||[];
+
+  const group = (label) => {
+    const g = document.createElement('div');
+    g.className = 'pgroup'; g.textContent = label; box.appendChild(g);
+  };
+  const sub = (label) => {
+    const s = document.createElement('div');
+    s.className = 'psub'; s.textContent = label; box.appendChild(s);
+  };
+  const chip = (p) => {
+    const el = document.createElement('span');
+    el.className = 'chip' + (p.builtin?'':' user') + (p.group==='ncp'?' ncp':'');
+    el.textContent = p.name;
+    el.title = p.desc + (p.params ? ' · 参数: ' + fmtParams(p.params) + '（写入时可调）' : '') + (p.builtin?'':'（自己保存的）');
+    el.onclick = async ()=>{
+      const r = await api('/api/preset?id='+encodeURIComponent(p.id), {method:'POST'});
+      if(!r.ok) return toast(r.message||'加载失败','err');
+      S.record = r; render(r); $('#writebtn').disabled = false;
+      $('#writebtn').textContent = '写入 ' + S.slot;
+      $('#pcname').value = r.cam || (p.name.replace(/[^A-Za-z0-9 _\-]/g,'').slice(0,19)) || 'Z30FIT';
+    };
+    box.appendChild(el);
+  };
+
+  const builtin = ps.filter(p => p.group !== 'ncp' && p.builtin);
+  const ncp = ps.filter(p => p.group === 'ncp');
+  const user = ps.filter(p => !p.builtin);
+
+  if(builtin.length){ group('内置示例'); builtin.forEach(chip); }
+  if(ncp.length){
+    group('真实配方库');
+    const cats = [...new Set(ncp.map(p=>p.cat))];
+    cats.forEach(cat => { sub(cat); ncp.filter(p=>p.cat===cat).forEach(chip); });
+  }
+  if(user.length){ group('我的预设'); user.forEach(chip); }
+}
+
+async function savePreset(){
+  if(!S.record) return toast('先选一个参考或预设','err');
+  const name = prompt('预设名（英文/数字，≤19）', $('#pcname').value.trim() || 'CUSTOM');
+  if(!name) return;
+  const desc = prompt('一句话描述（可空）', '');
+  const q = new URLSearchParams({token:S.record.token, name, desc: desc||''});
+  const r = await api('/api/save_preset?'+q.toString(), {method:'POST'});
+  toast(r.message || '已保存', r.ok?'ok':'err');
+  if(r.ok) loadPresets();
+}
+
+function renderRecipe(d){
+  const t = d.tone, b = d.banding, meta = d.recipe_meta || {};
+  const band = b.monotone && !(b.artifact_flats||[]).length
+    ? '<span style="color:#15803d">✅ 无断层</span>' : '<span style="color:#b91c1c">⚠ 有塌陷</span>';
+  const de = (meta.metrics && meta.metrics.mean) ? `原始 ΔE ${Number(meta.metrics.mean).toFixed(2)}` : '';
+
+  $('#result').innerHTML = `
+    <div class="verdict ok">
+      <div><div class="lbl">配方包已载入</div>
+      <div class="txt">${esc(meta.note || '校验通过，可以直接写入机身')}</div></div>
+    </div>
+
+    <div class="row" style="align-items:flex-end;margin-bottom:14px">
+      <div>
+        <div class="de" style="font-size:20px">${esc(d.name)}</div>
+        <div class="small muted" style="margin-top:2px">${esc(d.source)} · ${esc(meta.created||'')} ${esc(de)}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="small muted">≥ 写入前会先备份目标槽位</div>
+        <div class="small muted">${esc(meta.tool||'')}</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="stat"><div class="k">黑位</div><div class="v">${(t.black*100).toFixed(1)}%</div></div>
+      <div class="stat"><div class="k">白位</div><div class="v">${(t.white*100).toFixed(1)}%</div></div>
+      <div class="stat"><div class="k">中间调对比</div><div class="v">${t.contrast_25_75.toFixed(2)}×</div></div>
+      <div class="stat"><div class="k">断层</div><div class="v" style="font-size:13px">${band}</div></div>
+    </div>
+
+    <div class="row" style="align-items:flex-start">
+      <div>
+        <label class="fld">曲线</label>
+        <canvas id="curve" width="640" height="150"></canvas>
+      </div>
+      <div style="max-width:230px">
+        <label class="fld">说明</label>
+        <div class="small muted">配方包里存的是 614 字节载荷，曲线是唯一真值；
+        元数据（名称、误差）只是备注，丢了也不影响写入。</div>
+      </div>
+    </div>
+
+    <label class="fld" style="margin-top:16px">这条曲线作用在标准测试图上</label>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <img class="thumb" src="${d.previews.chart}" data-zoom>
+      <img class="thumb" src="${d.previews.scene}" data-zoom>
+      <img class="thumb" src="${d.previews.gradient}" data-zoom>
+    </div>
+
+    <p class="small muted" style="margin-top:12px">
+      <a href="#" onclick="exportRecipe();return false;">⬇ 另存为新的配方包</a>
+      · <a href="#" onclick="savePreset();return false;">保存为预设</a>
+    </p>`;
+
+  drawCurve(d.curve);
+  document.querySelectorAll('[data-zoom]').forEach(img=>{
+    img.onclick = ()=>{ $('#zoomi').src = img.src; $('#zoom').classList.add('show'); };
+  });
+  $('#resultcard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function renderPair(d){
+  const m = d.metrics, t = d.tone, b = d.banding, adv = d.advice;
+  const band = b.monotone && !(b.artifact_flats||[]).length
+    ? '<span style="color:#15803d">✅ 无断层</span>'
+    : '<span style="color:#b91c1c">⚠ 有塌陷</span>';
+
+  $('#result').innerHTML = `
+    <div class="verdict ${adv.level}">
+      <div><div class="lbl">${adv.level==='ok'?'建议写入':adv.level==='caution'?'谨慎写入':'不建议写入'}</div>
+      <div class="txt">${esc(adv.text)}</div></div>
+    </div>
+
+    <div class="row" style="align-items:flex-end;margin-bottom:14px">
+      <div>
+        <div class="de">${m.mean.toFixed(2)} <small>ΔE 平均</small></div>
+        <div class="small muted" style="margin-top:2px">
+          套曲线前 ${m.before_mean.toFixed(2)} → 之后 ${m.mean.toFixed(2)}，误差降了 ${((1-m.mean/m.before_mean)*100).toFixed(0)}%
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div class="small muted">P95 ${m.p95.toFixed(2)} · 最大 ${m.max.toFixed(2)}</div>
+        <div class="small muted">≤2.0 的点：${(m.within_2*100).toFixed(0)}%　对准位移 ${m.shift[0]},${m.shift[1]} px</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="stat"><div class="k">黑位</div><div class="v">${(t.black*100).toFixed(1)}%</div></div>
+      <div class="stat"><div class="k">白位</div><div class="v">${(t.white*100).toFixed(1)}%</div></div>
+      <div class="stat"><div class="k">中间调对比</div><div class="v">${t.contrast_25_75.toFixed(2)}×</div></div>
+      <div class="stat"><div class="k">逐通道 RMSE</div><div class="v" style="font-size:13px">${m.rmse_r.toFixed(1)}/${m.rmse_g.toFixed(1)}/${m.rmse_b.toFixed(1)}</div></div>
+    </div>
+
+    <label class="fld">原图 → 目标图 → 这条曲线的效果（第 3 张就是机身拍出来会长的样子）</label>
+    <img class="thumb" src="${d.previews.pair}" data-zoom alt="成对图对比">
+
+    <div class="row" style="margin-top:16px;align-items:flex-start">
+      <div>
+        <label class="fld">拟合出的曲线</label>
+        <canvas id="curve" width="640" height="150"></canvas>
+      </div>
+      <div style="max-width:230px">
+        <label class="fld">断层检测</label>
+        <div class="small">${band}</div>
+        <div class="small muted" style="margin-top:6px">最长塌陷 ${b.max_flat_run} 步 · 8 位可用码值 ${b.distinct_codes}/256</div>
+      </div>
+    </div>
+
+    <label class="fld" style="margin-top:16px">这条曲线作用在标准测试图上</label>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <img class="thumb" src="${d.previews.chart}" data-zoom>
+      <img class="thumb" src="${d.previews.scene}" data-zoom>
+      <img class="thumb" src="${d.previews.gradient}" data-zoom>
+    </div>
+
+    <p class="small muted" style="margin-top:12px">
+      <a href="#" onclick="exportRecipe();return false;">⬇ 导出配方包 (.z30)</a>
+      · <a href="#" onclick="savePreset();return false;">保存为预设</a>
+      —— 导出后可以传给手机端或别的电脑
+    </p>
+
+    <div class="banner show" style="margin-top:14px">
+      这是三种输入里唯一有真值的：ΔE 是拿原图套上曲线后和目标图逐像素比出来的。
+      不过曲线只能搬影调——目标图里的偏色、去饱和、分离色调搬不走，这部分会留在 ΔE 里，
+      所以「降了多少」比「降到多少」更值得看。
+    </div>`;
+
+  drawCurve(d.curve);
+  document.querySelectorAll('[data-zoom]').forEach(img=>{
+    img.onclick = ()=>{ $('#zoomi').src = img.src; $('#zoom').classList.add('show'); };
+  });
+  $('#resultcard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function renderImage(d){
+  const t = d.tone, b = d.banding, im = d.image_metrics, adv = d.advice;
+  const keys = ['p5','p25','p50','p75','p95'];
+  const rows = keys.map(k=>`
+    <tr><td>${k.replace('p','P')}</td>
+        <td class="n">${im.source_p[k].toFixed(0)}</td>
+        <td class="n">${im.anchors[k].toFixed(0)}</td>
+        <td class="n">${(im.anchors[k]-im.source_p[k] >= 0 ? '+' : '')}${(im.anchors[k]-im.source_p[k]).toFixed(0)}</td></tr>`).join('');
+
+  const band = b.monotone && !(b.artifact_flats||[]).length
+    ? '<span style="color:#15803d">✅ 无断层</span>'
+    : '<span style="color:#b91c1c">⚠ 有塌陷，建议调节点数重拟合</span>';
+
+  $('#result').innerHTML = `
+    <div class="verdict ${adv.level}">
+      <div>
+        <div class="lbl">${adv.level==='ok'?'可以用':adv.level==='caution'?'谨慎':'不建议'}</div>
+        <div class="txt">${esc(adv.text)}</div>
+      </div>
+    </div>
+
+    <div class="row" style="align-items:flex-end;margin-bottom:14px">
+      <div>
+        <div class="de">${im.tone_match_mean.toFixed(2)} <small>灰阶 · 影调贴合误差</small></div>
+        <div class="small muted" style="margin-top:2px">最大偏差 ${im.tone_match_max.toFixed(2)} 灰阶（0–255 刻度）</div>
+      </div>
+      <div style="text-align:right">
+        <div class="small muted">纯黑截断 ${im.clip_low.toFixed(1)}% · 纯白截断 ${im.clip_high.toFixed(1)}%</div>
+        <div class="small muted">这是影调分布的接近程度，<b>不是</b>逐像素还原度</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="stat"><div class="k">黑位</div><div class="v">${(t.black*100).toFixed(1)}%</div></div>
+      <div class="stat"><div class="k">白位</div><div class="v">${(t.white*100).toFixed(1)}%</div></div>
+      <div class="stat"><div class="k">中间调对比</div><div class="v">${t.contrast_25_75.toFixed(2)}×</div></div>
+      <div class="stat"><div class="k">断层</div><div class="v" style="font-size:13px">${band}</div></div>
+    </div>
+
+    <label class="fld">参考图 vs 这条曲线的效果</label>
+    <img class="thumb" src="${d.previews.ref_compare}" data-zoom alt="参考图对比">
+
+    <label class="fld" style="margin-top:12px">亮度分布：参考图（蓝） vs 曲线作用后的标准场景（粉）</label>
+    <img class="thumb" src="${d.previews.hist}" data-zoom alt="直方图对比">
+
+    <div class="row" style="margin-top:16px;align-items:flex-start">
+      <div>
+        <label class="fld">拟合出的曲线</label>
+        <canvas id="curve" width="640" height="150"></canvas>
+      </div>
+      <div style="max-width:230px">
+        <label class="fld">分位锚点（灰阶）</label>
+        <table><thead><tr><th>分位</th><th>典型场景</th><th>参考图</th><th>差</th></tr></thead>
+        <tbody>${rows}</tbody></table>
+      </div>
+    </div>
+
+    <label class="fld" style="margin-top:16px">这条曲线作用在标准测试图上</label>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <img class="thumb" src="${d.previews.chart}" data-zoom alt="色卡">
+      <img class="thumb" src="${d.previews.scene}" data-zoom alt="风景">
+      <img class="thumb" src="${d.previews.gradient}" data-zoom alt="渐变">
+    </div>
+
+    <p class="small muted" style="margin-top:14px">
+      参考图 ${d.source.split('/').pop()} · 用时 ${d.elapsed ?? '?'}s
+      · <a href="#" onclick="exportRecipe();return false;">⬇ 导出配方包 (.z30)</a>
+      · <a href="#" onclick="savePreset();return false;">保存为预设</a>
+    </p>
+
+    <div class="banner show" style="margin-top:14px">
+      单图模式没有真值，所以给不出 ΔE。这里的「影调贴合误差」衡量的是：曲线有没有准确复现参考图的分位锚点。
+      色彩个性（偏色、去饱和、分离色调）无法从一张图反推，也不会被写进机身。
+      想要真正的还原度，请用<b>成对图</b>（同一场景的原始版 + 目标版）。
+    </div>`;
+
+  drawCurve(d.curve);
+  document.querySelectorAll('[data-zoom]').forEach(img=>{
+    img.onclick = ()=>{ $('#zoomi').src = img.src; $('#zoom').classList.add('show'); };
+  });
+  $('#resultcard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function drawCurve(pts){
+  const c = $('#curve'), ctx = c.getContext('2d');
+  const W = c.width, H = c.height, pad = 8;
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle = '#e5e7eb'; ctx.lineWidth = 1;
+  for(let i=0;i<=4;i++){
+    const x = pad + i*(W-2*pad)/4, y = pad + i*(H-2*pad)/4;
+    ctx.beginPath(); ctx.moveTo(x,pad); ctx.lineTo(x,H-pad); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(W-pad,y); ctx.stroke();
+  }
+  ctx.strokeStyle = '#cfd6de'; ctx.beginPath();
+  ctx.moveTo(pad,H-pad); ctx.lineTo(W-pad,pad); ctx.stroke();
+  ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 2.2; ctx.beginPath();
+  pts.forEach((v,i)=>{
+    const x = pad + (i/(pts.length-1))*(W-2*pad);
+    const y = H - pad - v*(H-2*pad);
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  });
+  ctx.stroke();
+}
+
+// ---------- 槽位 ----------
+function renderSlotPlaceholders(){
+  const box = $('#slots'); box.innerHTML = '';
+  ['C1','C2','C3','C4','C5','C6','C7','C8','C9'].forEach(name=>{
+    const el = document.createElement('div');
+    el.className = 'slot' + (name===S.slot?' sel':'');
+    el.innerHTML = `<span class="sn">${name}</span><span class="st">·</span>`;
+    el.onclick = ()=>{ S.slot = name; [...box.children].forEach(c=>c.classList.remove('sel')); el.classList.add('sel'); updateFoot(); };
+    box.appendChild(el);
+  });
+}
+
+async function refreshSlots(){
+  let d;
+  try{ d = await api('/api/slots'); }catch(e){
+    renderSlotPlaceholders();
+    setCamState('off', '服务无响应');
+    return;
+  }
+  if(!d.ok){
+    // 依赖缺失或后端异常：不能显示成「已连接」，否则用户以为槽位读到了
+    S.slots = [];
+    renderSlotPlaceholders();
+    setCamState('off', d.reason === 'missing_deps' ? '缺少 pyusb' : '相机不可用');
+    $('#footinfo').textContent = d.message || '';
+    if(d.hint) $('#footinfo').title = d.hint;
+    return;
+  }
+  S.slots = d.slots||[];
+  const box = $('#slots'); box.innerHTML = '';
+  let offline = false;
+  S.slots.forEach(s=>{
+    if(s.state==='offline') offline = true;
+    const el = document.createElement('div');
+    el.className = 'slot ' + s.state + (s.slot===S.slot?' sel':'');
+    el.title = `${s.slot} · ${s.label}${s.name?' · '+s.name:''}`;
+    const st = s.state==='full' ? (s.name||'有内容').slice(0,5)
+             : s.state==='params' ? '参数'
+             : s.state==='empty' ? '空' : offline?'—':'?';
+    el.innerHTML = `<span class="sn">${s.slot}</span><span class="st">${esc(st)}</span>`;
+    el.onclick = ()=>{ S.slot = s.slot; [...box.children].forEach(c=>c.classList.remove('sel')); el.classList.add('sel'); updateFoot(); };
+    box.appendChild(el);
+  });
+  setCamState(offline ? 'off' : 'on', offline ? '相机未连接' : '相机已连接');
+  updateFoot();
+}
+
+function setCamState(state, text){
+  const pill = $('#campill');
+  pill.className = 'pill ' + (state === 'on' ? 'on' : 'off');
+  pill.innerHTML = '<i class="dot"></i><span>' + esc(text) + '</span>';
+}
+
+function currentSlot(){ return S.slots.find(s=>s.slot===S.slot) || {}; }
+function updateFoot(){
+  const s = currentSlot();
+  const bits = [s.label||''];
+  if(s.name) bits.push(s.name);
+  $('#footinfo').textContent = bits.filter(Boolean).join(' · ');
+  const wb = $('#writebtn');
+  if(wb && !wb.disabled) wb.textContent = `写入 ${S.slot}`;
+}
+
+// ---------- 写入 ----------
+$('#writebtn').onclick = ()=>{
+  if(!S.record) return toast('先拟合一个参考','err');
+  const s = currentSlot();
+  const name = $('#pcname').value.trim() || 'Z30FIT';
+  const occupied = s.state==='full' || s.state==='params';
+
+  $('#mtitle').textContent = `写入 ${S.slot}`;
+  $('#mwarn').style.display = occupied ? 'block' : 'none';
+  $('#mwarn').textContent = occupied
+    ? `${S.slot} 里现在已有内容（${s.name||s.label}），写入会覆盖它。原内容会自动备份到 out/backups/。`
+    : `会先读取 ${S.slot} 并备份，再写入并逐字节校验。`;
+  $('#mtext').innerHTML = `载荷 614 字节，名称 <b>${esc(name)}</b>，曲线来自 <b>${esc(S.record.name)}</b>`
+    + (occupied?'<br><span class="small muted">覆盖前会先落盘保存，失败可回滚。</span>':'');
+
+  $('#modal').classList.add('show');
+  fillParams(S.record);
+  $('#mok').onclick = ()=>{ $('#modal').classList.remove('show'); doWrite(name); };
+};
+
+// ---- 写入参数控制（锐化 / 清晰度 / 饱和度）----
+function fmtNum(v){
+  v = Number(v) || 0;
+  return (v > 0 ? '+' : '') + (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
+}
+
+function fillParams(rec){
+  const p = (rec && rec.params) || {};
+  const vals = {
+    psharp: p.sharp ?? 0,
+    pclarity: p.clarity ?? 0,
+    psat: p.sat ?? p.saturation ?? 0,
+  };
+  for(const id in vals){
+    const el = $('#'+id), lab = $('#'+id+'v');
+    if(el){ el.value = vals[id]; if(lab) lab.textContent = fmtNum(vals[id]); }
+  }
+  const hasParams = Object.keys(p).length > 0;
+  $('#puse').checked = true;
+  $('#pblock').classList.remove('off');
+  $('#pnote').textContent = hasParams
+    ? `已自动填入配方原始参数（${rec.name}）。可手动调整，或取消勾选只写曲线。`
+    : '这条参考没有附带参数，默认写中性值。可手动调整，或取消勾选只写曲线。';
+}
+
+['psharp','pclarity','psat'].forEach(id=>{
+  const el = $('#'+id);
+  if(el) el.oninput = ()=> { const lab = $('#'+id+'v'); if(lab) lab.textContent = fmtNum(el.value); };
+});
+$('#puse').onchange = e => $('#pblock').classList.toggle('off', !e.target.checked);
+$('#mcancel').onclick = ()=> $('#modal').classList.remove('show');
+$('#pcname').oninput = e => {
+  const clean = e.target.value.replace(/[^A-Za-z0-9 _\-]/g, '').slice(0, 19);
+  if(clean !== e.target.value) e.target.value = clean;
+};
+
+async function doWrite(name){
+  const btn = $('#writebtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 写入中…';
+  try{
+    const q = new URLSearchParams({token:S.record.token, slot:S.slot, name, overwrite:'1'});
+    if($('#puse').checked){
+      q.set('params', JSON.stringify({
+        sharp: parseFloat($('#psharp').value) || 0,
+        clarity: parseFloat($('#pclarity').value) || 0,
+        saturation: parseFloat($('#psat').value) || 0,
+        mid_sharp: 0,
+        quick_sharp: 0,
+      }));
+    }
+    const d = await api('/api/write?'+q.toString(), {method:'POST'});
+    if(d.ok) toast(`✅ ${d.message}`, 'ok');
+    else toast(`写入未完成：${d.message}`, 'err');
+    await refreshSlots();
+  }catch(e){ toast('写入出错：'+e.message,'err'); }
+  finally{ btn.disabled=false; btn.textContent='写入 '+S.slot; }
+}
+
+$('#rollbackbtn').onclick = async ()=>{
+  if(!confirm(`把 ${S.slot} 恢复到最近一次写入前的状态？`)) return;
+  const d = await api('/api/rollback?slot='+S.slot, {method:'POST'});
+  toast(d.message, d.ok?'ok':'err');
+  await refreshSlots();
+};
+
+$('#zoom').onclick = ()=> $('#zoom').classList.remove('show');
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'){ $('#zoom').classList.remove('show'); $('#modal').classList.remove('show'); }
+});
+
+EMPTY_HTML = $('#result').innerHTML;
+updateModeHint();
+loadSamples();
+loadPresets();
+renderSlotPlaceholders();
+refreshSlots();
+setInterval(refreshSlots, 60000);
+
+// 深度链接：?src=sample:xxx.cube&auto=1
+(() => {
+  const qs = new URLSearchParams(location.search);
+  const src = qs.get('src');
+  if(!src) return;
+  S.src = src;
+  $('#fitbtn').disabled = false;
+  $('#d1t').textContent = '已选择文件';
+  $('#d1s').textContent = src.split(':').pop();
+  $('#drop').classList.add('has');
+  const tgt = qs.get('target');
+  if(tgt){ S.target = tgt; $('#drop2').style.display='block';
+           $('#drop2').classList.add('has');
+           $('#d2t').textContent='已选目标图';
+           $('#d2s').textContent=tgt.split(':').pop()+'　·　成对图模式'; }
+  if(qs.get('auto') === '1') setTimeout(()=>$('#fitbtn').click(), 120);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 运行产物：拟合结果、备份、上传、渲染图，全是本地数据
+out/
+output/
+data/
+
+# 打包产物：dist/ 是 66MB 的 exe，build/ 是 PyInstaller 中间文件
+dist/
+build/
+
+# 上游原始数据（200KB，含大量品牌/型号字符串，运行时不参与）
+# 需要重新生成 ncp_data.py 时自行从 z-cloud-ai 取回，见 tools/gen_ncp_data.py
+thirdparty/
+
+# 工具与系统
+.workbuddy/
+.gradle/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+
+# Android
+android/.gradle/
+android/.idea/
+android/build/
+android/app/build/
+android/local.properties
+android/captures/
+*.iml
+*.apk
+*.aab
+
+# 签名文件永远不进库
+*.jks
+*.keystore

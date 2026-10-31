@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!--
+      Lint 建议把 mipmap-anydpi-v26 合并成 mipmap-anydpi（因为 minSdk 已经是 26）。
+      但 <adaptive-icon> 只有带 -v26 限定符的目录才会被 AAPT 收录，改名会导致
+      "resource mipmap/ic_launcher not found"。这条按误报处理。
+    -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="src/main/res/mipmap-anydpi-v26" />
+    </issue>
+</lint>

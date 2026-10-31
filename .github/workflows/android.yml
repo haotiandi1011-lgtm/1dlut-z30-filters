@@ -1,0 +1,97 @@
+name: Android APK
+
+# 只在动到安卓端时触发，避免改 Python 代码也跑一次安卓构建。
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  pull_request:
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    env:
+      # 配了这组 Secret 才出签名的 release 包；没配就只出 debug 包（可直接安装）。
+      KEYSTORE_B64: ${{ secrets.Z30_KEYSTORE_BASE64 }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Show Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" || true
+          ls "$ANDROID_HOME/build-tools" || true
+
+      - name: Unit tests
+        run: gradle :app:testDebugUnitTest --no-daemon --console=plain
+
+      - name: Android Lint
+        run: gradle :app:lintDebug --no-daemon --console=plain
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --no-daemon --console=plain
+
+      - name: Decode release keystore
+        if: env.KEYSTORE_B64 != ''
+        run: echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/z30-release.jks"
+
+      - name: Build signed release APK
+        if: env.KEYSTORE_B64 != ''
+        env:
+          Z30_KEYSTORE: ${{ runner.temp }}/z30-release.jks
+          Z30_STORE_PASSWORD: ${{ secrets.Z30_STORE_PASSWORD }}
+          Z30_KEY_ALIAS: ${{ secrets.Z30_KEY_ALIAS }}
+          Z30_KEY_PASSWORD: ${{ secrets.Z30_KEY_PASSWORD }}
+        run: gradle :app:assembleRelease --no-daemon --console=plain
+
+      - name: Collect APKs
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/debug/app-debug.apk out/z30tone-writer-0.1.0-debug.apk
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk out/z30tone-writer-0.1.0-release.apk
+          fi
+          ls -lh out
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: z30tone-writer-apk
+          path: android/out/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach APK to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" out/*.apk --clobber
