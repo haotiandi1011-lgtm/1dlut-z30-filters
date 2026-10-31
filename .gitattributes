@@ -1,2 +1,6 @@
+# 批处理必须是 CRLF + 系统代码页（中文 Windows 为 GBK），否则 cmd 解析会出错
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# 本文件自身不做换行转换
+.gitattributes -text
