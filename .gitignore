@@ -6,9 +6,10 @@ __pycache__/
 venv/
 
 # 运行产物：拟合结果、备份、上传、渲染图，全是本地数据
+# 注意：必须带前导斜杠，只忽略根目录；否则会连 android/.../writer/data/ 一起吞掉
 out/
 output/
-data/
+/data/
 
 # 打包产物：dist/ 是 66MB 的 exe，build/ 是 PyInstaller 中间文件
 dist/
