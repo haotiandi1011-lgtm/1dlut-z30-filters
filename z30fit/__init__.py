@@ -11,7 +11,7 @@
     report   markdown 报告生成
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 LUT_POINTS = 256          # Z30 机身曲线的采样点数
 LUT_MAX = 32767           # 15 位值域上限（0x7FFF）

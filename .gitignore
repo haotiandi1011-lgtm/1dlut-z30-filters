@@ -13,6 +13,7 @@ output/
 
 # 打包产物：dist/ 是 66MB 的 exe，build/ 是 PyInstaller 中间文件
 dist/
+dist.old-*/
 build/
 
 # 上游原始数据（200KB，含大量品牌/型号字符串，运行时不参与）
