@@ -18,9 +18,28 @@ Claude Code 的 `~/.claude/skills/`），把技能装进去；也可以指定：
 ```bash
 npx z30tone-setup --workbuddy     # 只装 WorkBuddy
 npx z30tone-setup --claude        # 只装 Claude Code
-npx z30tone-setup --dir <路径>    # 装到任意目录
+npx z30tone-setup --dir <路径>    # 装到任意平台的技能根目录
 npx z30tone-setup --remove        # 卸载
 ```
+
+## 安装前提（两条，先看）
+
+1. **需要本机有 Node.js 18+**（`npx` 依赖它）。没有 Node 的用户别装 Node，走下面的「手动安装」。
+2. **目标平台得支持 SKILL.md 技能机制**。支持：WorkBuddy、Claude Code，以及任何按
+   SKILL.md 约定读取技能目录的平台（用 `--dir` 指到它的技能根目录）。
+   **不支持**：豆包、DeepSeek 网页版这类没有「技能目录」概念的纯聊天产品——装了也没有东西去读它。
+   判断方法：去那个平台的文档里搜 "skills" 或 "SKILL.md"。
+
+## 手动安装（没有 Node / 平台不在自动检测范围）
+
+技能本体就是一个文件夹，安装器只是搬运工。所以手动装等价：
+
+1. 从仓库把 `skill/z30tone-setup/` 整个文件夹下载下来
+   （`https://github.com/haotiandi1011-lgtm/1dlut-z30-filters/tree/main/skill`，
+   或下载仓库 zip 后只取这一个文件夹）
+2. 把它拷进目标平台的技能根目录，保证路径形如
+   `<技能根目录>/z30tone-setup/SKILL.md`
+3. 重启/刷新该平台，让它重新扫描技能
 
 ## 这个技能会帮用户做什么
 

@@ -1,6 +1,6 @@
 {
   "name": "z30tone-setup",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Z30 影调工具的一站式安装与配置技能（通用 Agent Skill）：下载启动、Zadig 驱动、安卓连接、首次写入与报错排查，装上即用",
   "license": "MIT",
   "type": "module",

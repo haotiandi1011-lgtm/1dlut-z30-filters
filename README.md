@@ -148,7 +148,7 @@ C:\Users\<你的用户名>\AppData\Local\Z30影调工具\
 | [`负结果-NP3导入不带曲线.md`](负结果-NP3导入不带曲线.md) | 走过的死路，别再重复 |
 | [`Phase1-拟合管线说明.md`](Phase1-拟合管线说明.md) | 拟合算法、三种输入、指标含义 |
 | [`android/README.md`](android/README.md) | 安卓端构建与使用 |
-| [`skill/`](skill/README.md) | 通用 Agent Skill（`npx z30tone-setup`）：让 AI 助手带用户一站式安装配置 |
+| [`skill/`](skill/README.md) | 通用 Agent Skill（`npx z30tone-setup`，需本机 Node 18+；没有 Node 可手动拷文件夹）：让 AI 助手带用户一站式安装配置 |
 | [`交接-安卓端与开源.md`](交接-安卓端与开源.md) | 开发过程记录：安卓端怎么实现的、真机验证到哪一步 |
 
 ## 致谢
