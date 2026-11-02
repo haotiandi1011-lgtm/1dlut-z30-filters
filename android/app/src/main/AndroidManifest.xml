@@ -4,9 +4,11 @@
     <!-- 只做 USB 主机通信，不联网、不读相册、不需要任何运行时权限。 -->
     <uses-feature android:name="android.hardware.usb.host" android:required="true" />
 
+    <!-- largeHeap：导出成品 PNG 要按原始分辨率解码照片（20MP ≈ 80MB 位图） -->
     <application
         android:name=".Z30App"
         android:allowBackup="true"
+        android:largeHeap="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"

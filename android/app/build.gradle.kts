@@ -12,8 +12,10 @@ android {
         applicationId = "com.z30tone.writer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // versionCode 只增不减（内部构建号）：0.2.0 之前已有 versionCode 3 的测试包
+        // 装在真机上，回退会让测试者被迫卸载重装、丢掉本地配方与备份。
+        versionCode = 3
+        versionName = "0.2.0"
     }
 
     // 发布签名走环境变量，CI 里由 GitHub Secrets 注入；本地没有就跳过，只出 debug 包。

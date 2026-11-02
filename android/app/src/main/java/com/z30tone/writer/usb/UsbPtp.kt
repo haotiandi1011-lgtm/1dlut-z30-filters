@@ -6,6 +6,7 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
+import android.os.Build
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 
@@ -173,13 +174,7 @@ class UsbPtp private constructor(
             log("跳过 PTP Class Reset")
         }
 
-        val haltIn = runCatching {
-            connection.controlTransfer(0x02, 0x01, 0x00, endpointIn.address, null, 0, 1000)
-        }.getOrNull()
-        val haltOut = runCatching {
-            connection.controlTransfer(0x02, 0x01, 0x00, endpointOut.address, null, 0, 1000)
-        }.getOrNull()
-        log("清 HALT → IN:$haltIn OUT:$haltOut")
+        clearHalts("握手")
 
         drain()
 
@@ -222,7 +217,14 @@ class UsbPtp private constructor(
 
     private class Container(val type: Int, val code: Int, val transaction: Int, val data: ByteArray)
 
-    private fun send(type: Int, code: Int, transaction: Int, params: IntArray, data: ByteArray) {
+    private fun send(
+        type: Int,
+        code: Int,
+        transaction: Int,
+        params: IntArray,
+        data: ByteArray,
+        writeTimeout: Int = timeoutMs,
+    ) {
         val body = ByteArray(params.size * 4 + data.size)
         params.forEachIndexed { index, value -> writeIntLe(body, index * 4, value) }
         if (data.isNotEmpty()) {
@@ -235,23 +237,45 @@ class UsbPtp private constructor(
         writeShortLe(header, 6, code)
         writeIntLe(header, 8, transaction)
 
-        bulkWrite(header + body)
+        // 出错时要说清卡在哪个阶段：指令阶段失败 = 什么都没写进去；
+        // 数据阶段失败 = 指令已被相机收下，但数据没送完（读回校验会拦住它）。
+        bulkWrite(header + body, if (type == TYPE_DATA) "数据阶段" else "指令阶段", writeTimeout)
     }
 
     private fun readContainer(timeout: Int = timeoutMs): Container {
         val buffer = ByteArray(MAX_CONTAINER)
         var total = 0
         val start = System.currentTimeMillis()
+        var stallClears = 0
 
-        while (total < 12) {
-            val read = bulkRead(buffer, total, buffer.size - total, timeout)
-            if (read <= 0) {
-                throw PtpException(
-                    "读相机超时（${System.currentTimeMillis() - start} ms 无响应）。" +
-                        "相机可能已休眠、不在 MTP 模式，或 USB 供电不足。"
-                )
+        // 关键：bulkTransfer 返回 -1 有两种完全不同的含义——
+        //   a) 真超时（等满了 timeout 才失败）；
+        //   b) **瞬间失败**：端点被相机 STALL（典型场景：重装 App / 上个进程被杀，
+        //      相机还挂着上个会话的残局）。b 是可恢复的：清 HALT 再读。
+        // 以前这里一见 -1 就立刻放弃，等于从没等过相机——连接就变成「2 ms 超时」。
+        // 现在等到超时窗口用完才认输，中途做最多 3 次端点恢复。
+        while (total < 12 && System.currentTimeMillis() - start < timeout) {
+            val left = (timeout - (System.currentTimeMillis() - start)).coerceAtLeast(50).toInt()
+            val read = bulkRead(buffer, total, buffer.size - total, left)
+            when {
+                read > 0 -> total += read
+
+                read < 0 && stallClears < 3 -> {
+                    stallClears++
+                    clearHalts("读取瞬时失败后")
+                    Thread.sleep(60)
+                }
+
+                else -> Thread.sleep(20) // 0：零长包或瞬时 0，让相机喘口气再等
             }
-            total += read
+        }
+
+        if (total < 12) {
+            throw PtpException(
+                "相机 ${System.currentTimeMillis() - start} ms 内没有回话（做过 $stallClears 次端点恢复）。" +
+                    "常见原因：相机休眠（半按快门唤醒）、不在 MTP/PTP 模式、USB 供电不足，" +
+                    "或还挂着上次会话的残局——拔插一次相机再连。"
+            )
         }
 
         val length = readIntLe(buffer, 0)
@@ -264,7 +288,8 @@ class UsbPtp private constructor(
         }
 
         while (total < length) {
-            val read = bulkRead(buffer, total, length - total, timeout)
+            val left = (timeout - (System.currentTimeMillis() - start)).coerceAtLeast(50).toInt()
+            val read = bulkRead(buffer, total, length - total, left)
             if (read <= 0) break
             total += read
         }
@@ -277,21 +302,52 @@ class UsbPtp private constructor(
     private fun bulkRead(buffer: ByteArray, offset: Int, length: Int, timeout: Int): Int =
         connection.bulkTransfer(endpointIn, buffer, offset, length, timeout)
 
-    private fun bulkWrite(data: ByteArray) {
+    private fun bulkWrite(data: ByteArray, phase: String, timeout: Int = timeoutMs) {
         var offset = 0
         var guard = 0
         while (offset < data.size) {
             val written = connection.bulkTransfer(
-                endpointOut, data, offset, data.size - offset, timeoutMs
+                endpointOut, data, offset, data.size - offset, timeout
             )
             if (written <= 0) {
-                throw PtpException("向相机写入失败（错误码 $written）。请拔插相机后重试。")
+                // bulkTransfer 的 -1 把「超时 / 端点被 STALL / 相机忙」混在一起，只能把可能性说全。
+                // 清 HALT 是传输层清障（不碰相机状态、不重写任何数据）：
+                // 端点一旦被相机 STALL，不清掉的话之后的每一次传输都还是 -1。
+                clearHalts("写入失败后")
+                throw PtpException(bulkFailText(phase, written, offset, data.size), written)
             }
             offset += written
             if (++guard > 32) {
-                throw PtpException("向相机写入失败：多次重试仍未写完。")
+                throw PtpException("向相机写入失败：多次分段仍未写完（已写 $offset / ${data.size} 字节）。")
             }
         }
+    }
+
+    /** 清两个 Bulk 端点的 HALT。只恢复 USB 管道，不改变相机里的任何东西。 */
+    private fun clearHalts(whenText: String) {
+        val inRes = runCatching {
+            connection.controlTransfer(0x02, 0x01, 0x00, endpointIn.address, null, 0, 1000)
+        }.getOrDefault(-1)
+        val outRes = runCatching {
+            connection.controlTransfer(0x02, 0x01, 0x00, endpointOut.address, null, 0, 1000)
+        }.getOrDefault(-1)
+        log("$whenText 清 HALT → IN:$inRes OUT:$outRes")
+    }
+
+    private fun bulkFailText(phase: String, code: Int, done: Int, total: Int): String {
+        val base = "向相机写入失败（$phase，已写 $done / $total 字节，错误码 $code）"
+        val causes = "。常见原因：相机刚休眠（半按快门唤醒它）、正在回放或翻菜单、" +
+            "线材只供电不传数据（用原装线、直连不加转接头）。" +
+            "USB 端点已清理，直接再点一次「写入」即可。"
+        val oem = when {
+            Build.MANUFACTURER.contains("oneplus", ignoreCase = true) ||
+                Build.MANUFACTURER.contains("realme", ignoreCase = true) ||
+                Build.MANUFACTURER.contains("oppo", ignoreCase = true) ->
+                " 一加/ColorOS 机型请再检查两点：设置里的「OTG 连接」要开着、并关掉「OTG 自动关闭」；" +
+                    "电池设置不要限制本应用。"
+            else -> ""
+        }
+        return base + causes + oem
     }
 
     private fun transaction(code: Int, params: IntArray, dataOut: ByteArray?): ByteArray {
@@ -333,8 +389,8 @@ class UsbPtp private constructor(
 
     fun close() {
         runCatching {
-            send(TYPE_COMMAND, OP_CLOSE_SESSION, transactionId + 1, intArrayOf(), EMPTY)
-            // 收尾用短超时：相机不应答时别把界面卡住
+            // 收尾用短超时：相机没在听（或已经挂了）时，别把断开流程卡住 5 秒。
+            send(TYPE_COMMAND, OP_CLOSE_SESSION, transactionId + 1, intArrayOf(), EMPTY, writeTimeout = 800)
             readContainer(300)
         }
         runCatching { connection.releaseInterface(usbInterface) }

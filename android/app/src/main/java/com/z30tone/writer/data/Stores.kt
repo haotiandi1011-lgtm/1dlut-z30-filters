@@ -17,6 +17,9 @@ import java.util.Locale
  */
 class RecipeStore(private val context: Context) {
 
+    /** 导入上限：.z30 配方包只有 1 KB 左右，超这个数的文件就是选错了。 */
+    private val MAX_IMPORT_BYTES = 1_000_000
+
     class Item(
         val file: File,
         val name: String,
@@ -33,8 +36,16 @@ class RecipeStore(private val context: Context) {
     private val dir: File
         get() = File(context.filesDir, "recipes").apply { if (!exists()) mkdirs() }
 
-    fun list(): List<Item> {
-        val files = dir.listFiles { file -> file.isFile && file.name.endsWith(Recipe.SUFFIX) }
+    /** 回收站。删掉的配方先放这儿，随时能拿回来，也可以在里面彻底删掉。 */
+    private val trashDir: File
+        get() = File(context.filesDir, "recipes_trash").apply { if (!exists()) mkdirs() }
+
+    fun list(): List<Item> = listIn(dir)
+
+    fun trash(): List<Item> = listIn(trashDir)
+
+    private fun listIn(folder: File): List<Item> {
+        val files = folder.listFiles { file -> file.isFile && file.name.endsWith(Recipe.SUFFIX) }
             ?: return emptyList()
         return files
             .sortedByDescending { it.lastModified() }
@@ -42,9 +53,34 @@ class RecipeStore(private val context: Context) {
     }
 
     fun import(uri: Uri): Item {
-        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            ?: throw IllegalArgumentException("读不到这个文件，换一个位置再试。")
+        // openInputStream 的三种失败要分开说话：拒绝授权、文件没了、拿不到流。
+        // 另外配方包只有 ~1KB，超大文件（误选了视频/相册原图）在读之前就拦掉，别把内存吃爆。
+        val bytes = try {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                readCapped(stream, MAX_IMPORT_BYTES)
+            }
+        } catch (e: SecurityException) {
+            throw IllegalArgumentException("没有权限读这个文件，重新在系统选择器里选一次")
+        } catch (e: java.io.FileNotFoundException) {
+            throw IllegalArgumentException("文件不存在或已被移动，重新选一次")
+        } ?: throw IllegalArgumentException("读不到这个文件，换一个位置再试。")
         return importBytes(bytes)
+    }
+
+    private fun readCapped(stream: java.io.InputStream, cap: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(64 * 1024)
+        while (true) {
+            val n = stream.read(buf)
+            if (n < 0) break
+            out.write(buf, 0, n)
+            if (out.size() > cap) {
+                throw IllegalArgumentException(
+                    "这个文件超过 ${cap / 1024} KB，不是配方包（.z30 只有 1 KB 左右）"
+                )
+            }
+        }
+        return out.toByteArray()
     }
 
     fun importBytes(bytes: ByteArray): Item {
@@ -66,7 +102,25 @@ class RecipeStore(private val context: Context) {
         return read(target)
     }
 
-    fun delete(item: Item): Boolean = item.file.delete()
+    /** 移入回收站（不是真删）。同名文件先清掉，避免恢复时串包。 */
+    fun delete(item: Item): Boolean {
+        val target = File(trashDir, item.file.name)
+        if (target.exists()) target.delete()
+        val ok = item.file.renameTo(target)
+        if (!ok) return item.file.delete()
+        return true
+    }
+
+    fun restore(item: Item): Boolean {
+        val target = File(dir, item.file.name)
+        if (target.exists()) target.delete()
+        return item.file.renameTo(target)
+    }
+
+    /** 彻底删除：回收站里的条目直接抹掉，不可恢复。 */
+    fun purge(item: Item): Boolean = item.file.delete()
+
+    fun purgeAll(): Int = trash().count { it.file.delete() }
 
     private fun read(file: File): Item {
         val packageData = Recipe.parse(file.readBytes())
@@ -138,4 +192,10 @@ class BackupStore(private val context: Context) {
     }
 
     fun read(file: File): ByteArray = file.readBytes()
+
+    /**
+     * 删除一份备份文件。备份不进回收站（约定如此），删了就没法再从这份恢复，
+     * 所以界面要求二次确认。
+     */
+    fun delete(item: Item): Boolean = item.file.delete()
 }
