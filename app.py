@@ -5,7 +5,8 @@
 Windows 10/11 一定有 Edge，`--app=URL` 给的就是无地址栏的独立窗口，
 零依赖、零额外体积。
 
-双击 exe 后如果窗口没起来，日志在 data/app.log。
+双击 exe 后如果窗口没起来，日志在数据目录的 app.log
+（默认 `%LOCALAPPDATA%\\Z30影调工具\\app.log`；便携模式下在同目录的 `data\\`）。
 """
 
 from __future__ import annotations
@@ -55,11 +56,6 @@ def main() -> int:
 
         threading.Thread(target=httpd.serve_forever, daemon=True).start()
         log(f"[start] {url}")
-
-        if os.environ.get("Z30_NO_WINDOW") == "1":
-            log("[test] Z30_NO_WINDOW=1，只起服务不弹窗")
-            threading.Event().wait()
-            return 0
 
         if os.environ.get("Z30_NO_WINDOW") == "1":
             log("[test] Z30_NO_WINDOW=1，只起服务不弹窗")

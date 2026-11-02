@@ -156,6 +156,14 @@ def to_u8(img: np.ndarray) -> Image.Image:
     return Image.fromarray(arr, mode="RGB")
 
 
+def save_png(path: str | Path, img: np.ndarray) -> Path:
+    """单张图落盘（不带标签、不带边框），给前端做拖动对比用。"""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    to_u8(img).save(path)
+    return path
+
+
 def diff_panel(a: np.ndarray, b: np.ndarray, gain: float = 8.0) -> np.ndarray:
     """放大的绝对差。开平方根是为了把 1–3 个码值的小偏差也显形，否则整块偏黑看不出东西。"""
     d = np.abs(np.asarray(a) - np.asarray(b)) * gain

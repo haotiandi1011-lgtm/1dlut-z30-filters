@@ -50,15 +50,20 @@ def render_previews(result: FitResult, lut: CubeLUT | None, outdir: str | Path) 
 
     for key, base in samples.items():
         panels: list[tuple[str, np.ndarray]] = [(img_mod.text("原图", "Original"), base)]
+        after = fitted(base, result.curve)
         if lut is not None:
             ref = lut.apply(base)
-            got = fitted(base, result.curve)
+            got = after
             panels.append((img_mod.text("参考 LUT", "Reference LUT"), ref))
             panels.append((img_mod.text("拟合 1D", "Fitted 1D"), got))
             panels.append((img_mod.text("差异 ×8（已提亮）", "Diff x8 (gamma-lifted)"), img_mod.diff_panel(ref, got, 8.0)))
         else:
-            panels.append((img_mod.text("拟合 1D", "Fitted 1D"), fitted(base, result.curve)))
+            panels.append((img_mod.text("拟合 1D", "Fitted 1D"), after))
         paths[key] = img_mod.strip(outdir / f"preview_{key}.png", panels, title=titles[key])
+
+        # 前端预览台要的是两张尺寸完全一致、不带标签的图，才能做拖动对比
+        paths[f"cmp_{key}_a"] = img_mod.save_png(outdir / f"cmp_{key}_a.png", base)
+        paths[f"cmp_{key}_b"] = img_mod.save_png(outdir / f"cmp_{key}_b.png", after)
 
     # 曲线图
     xs = np.linspace(0.0, 1.0, 256)

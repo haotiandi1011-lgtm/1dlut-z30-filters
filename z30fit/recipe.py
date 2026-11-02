@@ -20,6 +20,8 @@ from pathlib import Path
 
 import numpy as np
 
+from z30fit import __version__
+
 from . import payload as pl
 
 MAGIC = b"Z30PC1\x00\x00"
@@ -69,7 +71,7 @@ def make_meta(name: str, source: str, metrics: dict | None = None,
         "metrics": metrics or {},
         "tone": tone or {},
         "created": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "tool": "Z30影调工具 0.1",
+        "tool": f"Z30影调工具 {__version__}",
     }
 
 

@@ -50,13 +50,25 @@ def table_from_pts(pts: list[tuple[int, int]]) -> np.ndarray:
     return np.rint(np.clip(y, 0.0, 1.0) * LUT_MAX).astype(np.int64)
 
 
+_LISTING: list[dict] | None = None
+
+
 def listing() -> list[dict]:
-    return [
-        {"id": p["id"], "name": p["name"], "cat": p["cat"], "desc": p["desc"],
-         "base": p.get("base", ""), "params": p.get("params", {}),
-         "builtin": True, "group": "ncp"}
-        for p in NCP_PRESETS
-    ]
+    global _LISTING
+    if _LISTING is None:
+        out = []
+        for p in NCP_PRESETS:
+            curve = curve_from_pts(p["pts"])
+            # 界面那个小缩略曲线：17 个采样点，0..1000
+            spark = np.interp(np.linspace(0.0, 1.0, 17), np.linspace(0.0, 1.0, curve.size), curve)
+            out.append({
+                "id": p["id"], "name": p["name"], "cat": p["cat"], "desc": p["desc"],
+                "base": p.get("base", ""), "params": p.get("params", {}),
+                "cam": p.get("cam", ""), "builtin": True, "group": "ncp",
+                "spark": [int(round(float(v) * 1000)) for v in spark],
+            })
+        _LISTING = out
+    return _LISTING
 
 
 def get(pid: str) -> dict | None:
