@@ -1,0 +1,37 @@
+{
+  "name": "z30tone-setup",
+  "version": "0.2.0",
+  "description": "Z30 影调工具的一站式安装与配置技能（通用 Agent Skill）：下载启动、Zadig 驱动、安卓连接、首次写入与报错排查，装上即用",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "z30tone-setup": "install.mjs"
+  },
+  "files": [
+    "install.mjs",
+    "z30tone-setup/",
+    "README.md"
+  ],
+  "keywords": [
+    "agent-skills",
+    "skill",
+    "ai",
+    "nikon",
+    "z30",
+    "picture-control",
+    "ptp",
+    "lut",
+    "photography"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/haotiandi1011-lgtm/1dlut-z30-filters.git"
+  },
+  "homepage": "https://github.com/haotiandi1011-lgtm/1dlut-z30-filters/tree/main/skill#readme",
+  "bugs": {
+    "url": "https://github.com/haotiandi1011-lgtm/1dlut-z30-filters/issues"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
