@@ -44,3 +44,5 @@ android/captures/
 *.keystore
 # 软著申请材料（本地生成，含个人办理信息，不入库）
 软著材料/
+# 软著申请工具（个人材料工具，不入库；保留在本地）
+tools/gen_copyright_*.py
