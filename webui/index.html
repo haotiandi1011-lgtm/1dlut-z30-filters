@@ -563,11 +563,38 @@ async function uploadPhoto(file){
   setPhoto('upload:' + d.name, d.name, mb + ' MB');
 }
 
+// ---------- 界面状态持久化 ----------
+// 只存「引用」（upload:xxx.jpg / sample:xxx / 预设 id / 场景），不存图片本身。
+// 刷新页面后照片和选中的滤镜都还在——否则 F5 一下就回到解放前。
+const UI_KEY = 'z30tone.ui';
+
+function saveUiState(){
+  try{
+    localStorage.setItem(UI_KEY, JSON.stringify({
+      photo: S.photo, photoLabel: S.photoLabel, photoMeta: S.photoMeta,
+      presetId: S.presetId, scene: S.scene,
+    }));
+  }catch(e){ /* 隐私模式等写不进去就算了 */ }
+}
+
+function loadUiState(){
+  try{ return JSON.parse(localStorage.getItem(UI_KEY) || '{}'); }catch(e){ return {}; }
+}
+
+// 预览缓存上限：每切一条预设就多两张 1600px 预览图，不设上限会一直涨
+const PHOTO_CACHE_MAX = 12;
+
+function trimPhotoCache(){
+  const keys = Object.keys(S.photoCache);
+  while(keys.length > PHOTO_CACHE_MAX) delete S.photoCache[keys.shift()];
+}
+
 function setPhoto(src, label, meta, quiet){
   S.photo = src;
   S.photoLabel = label || String(src).split(':').pop();
   S.photoMeta = meta || '';
   updatePhotoUI();
+  saveUiState();
   if(S.record){
     S.scene = 'photo';
     renderTabs();
@@ -579,6 +606,7 @@ function setPhoto(src, label, meta, quiet){
 
 function clearPhoto(){
   S.photo = null; S.photoLabel = ''; S.photoMeta = '';
+  saveUiState();
   $('#pfile').value = '';
   updatePhotoUI();
   if(S.record){
@@ -990,8 +1018,26 @@ async function pickPreset(p){
     if(!r.ok){ toast(r.message||'加载失败','err'); markPreset(S.presetId); return; }
     S.presetId = p.id;
     setRecord(r);
+    saveUiState();
     $('#pcname').value = r.cam || p.id.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,19) || 'Z30FIT';
   }catch(e){ toast('加载失败：'+e.message, 'err'); }
+}
+
+// 页面加载后恢复上次的照片 / 滤镜 / 场景（深度链接优先，不覆盖）
+async function restoreUiState(){
+  const qs = new URLSearchParams(location.search);
+  if(qs.get('src') || qs.get('preset') || qs.get('photo')) return;
+  const st = loadUiState();
+  if(st.photo) setPhoto(st.photo, st.photoLabel, st.photoMeta, true);
+  if(st.presetId){
+    const p = S.presets.find(x => x.id === st.presetId);
+    if(p) await pickPreset(p);
+  }
+  if(st.scene && S.record && st.scene !== 'photo'
+     && stageScenes().some(pair => pair[0] === st.scene)){
+    renderTabs();
+    setStage(st.scene);
+  }
 }
 
 $('#psearch').oninput = renderPresetList;
@@ -1211,6 +1257,7 @@ function setStage(scene){
   const rec = S.record;
   if(!rec) return;
   S.scene = scene;
+  saveUiState();
   updateExportBtn();
   const note = document.getElementById('stagenote');
 
@@ -1218,7 +1265,11 @@ function setStage(scene){
     if(!S.photo){ renderStageNote('还没有选预览照片：在左边「参考源」里拖一张进来'); return; }
     const key = rec.token + '|' + S.photo;
     const cached = S.photoCache[key];
-    if(cached){ paintStage(cached.a, cached.b);
+    if(cached){
+      // 命中时把这条移到队尾（JS 对象按插入序），淘汰才会先丢最久没用的
+      delete S.photoCache[key];
+      S.photoCache[key] = cached;
+      paintStage(cached.a, cached.b);
       if(note) note.textContent = `${cached.w}×${cached.h} · ${cached.note} · 拖动分割线对比`;
       return; }
     renderStageNote('正在把你的照片套上这条曲线…');
@@ -1248,6 +1299,7 @@ async function loadPhotoPair(key){
       return;
     }
     S.photoCache[key] = {a:d.a, b:d.b, note:d.note, w:d.width, h:d.height, source:d.source};
+    trimPhotoCache();
     if(S.scene === 'photo'){
       paintStage(d.a, d.b, d.width / d.height);
       const note = document.getElementById('stagenote');
@@ -1507,7 +1559,7 @@ document.addEventListener('keydown', e=>{
 updateModeHint();
 EMPTY_STUDIO_HTML = $('#studio').innerHTML;
 loadSamples();
-loadPresets();
+loadPresets().then(restoreUiState);
 renderSlotPlaceholders();
 refreshSlots();
 setInterval(refreshSlots, 60000);
