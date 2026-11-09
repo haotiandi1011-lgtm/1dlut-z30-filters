@@ -3,6 +3,9 @@ package com.z30tone.writer.ui
 import android.app.Application
 import android.hardware.usb.UsbDevice
 import android.net.Uri
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.z30tone.writer.core.Payload
@@ -104,6 +107,22 @@ data class UiState(
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
+
+    /**
+     * 「照片对比」选中的照片。
+     *
+     * 为什么放在 ViewModel 而不是卡片内部：卡片位于 LazyColumn 的 item 里，
+     * 滚出可视区就会被回收，`remember` 的状态随之消失——用户表现为
+     * 「换个预设回来就要重新选照片」（有时不走远就还在，所以时好时坏）。
+     * 存在这里，卡片重新进入组合时按 URI 重新解码即可。
+     */
+    var comparePhotoUri by mutableStateOf<Uri?>(null)
+        private set
+
+    fun setComparePhoto(uri: Uri?) {
+        comparePhotoUri = uri
+    }
+
 
     private val hub = UsbHub.get(application)
     private val camera = CameraController(application)

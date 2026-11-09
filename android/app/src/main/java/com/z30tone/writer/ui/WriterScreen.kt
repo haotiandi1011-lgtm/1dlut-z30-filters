@@ -238,6 +238,8 @@ fun WriterScreen(viewModel: AppViewModel) {
                 PhotoCompareCard(
                     lut = chosen?.parsed?.lut,
                     presetName = chosen?.name ?: "未选预设",
+                    photoUri = viewModel.comparePhotoUri,
+                    onPickPhoto = viewModel::setComparePhoto,
                 )
             }
             item {
@@ -645,31 +647,47 @@ private fun suggestedExportName(presetName: String, ext: String): String {
 }
 
 @Composable
-private fun PhotoCompareCard(lut: IntArray?, presetName: String) {
+private fun PhotoCompareCard(
+    lut: IntArray?,
+    presetName: String,
+    photoUri: Uri?,
+    onPickPhoto: (Uri?) -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var picked by remember { mutableStateOf<Preview.Loaded?>(null) }
-    var photoUri by remember { mutableStateOf<Uri?>(null) }
     var after by remember { mutableStateOf<Bitmap?>(null) }
     var note by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var split by remember { mutableFloatStateOf(0.5f) }
     var exporting by remember { mutableStateOf(false) }
 
+    // 选择回调只负责「记下这张照片」，解码统一放在下面的 LaunchedEffect：
+    // 卡片滚出屏幕被回收、再回来时，也能按 URI 重新解码出画面对比。
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
+        // 尽量拿持久读权限：卡片重建、甚至进程回收后重新解码都不至于读不到
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+        onPickPhoto(uri)
+    }
+
+    LaunchedEffect(photoUri) {
+        if (photoUri == null) {
+            picked = null
+            return@LaunchedEffect
+        }
         error = null
-        scope.launch {
-            try {
-                val loaded = withContext(Dispatchers.IO) { Preview.load(context, uri) }
-                picked = loaded
-                photoUri = uri
-                note = loaded.note
-            } catch (e: Exception) {
-                error = e.message ?: "这张照片读不了"
-                picked = null
-                photoUri = null
-            }
+        try {
+            val loaded = withContext(Dispatchers.IO) { Preview.load(context, photoUri) }
+            picked = loaded
+            note = loaded.note
+        } catch (e: Exception) {
+            error = e.message ?: "这张照片读不了"
+            picked = null
         }
     }
 
