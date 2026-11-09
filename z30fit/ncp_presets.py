@@ -53,6 +53,31 @@ def table_from_pts(pts: list[tuple[int, int]]) -> np.ndarray:
 _LISTING: list[dict] | None = None
 
 
+def _personal_overrides() -> dict:
+    """个人使用版的命名覆盖层（可选）。
+
+    存在 `z30fit/personal_names.py` 时，用它替换中性显示名——
+    只改「显示名 / 建议机身名 / 说明里的旧风格名」，曲线与参数一个字节都不动。
+    删掉该文件即回到中性命名（开源版行为）。
+    """
+    try:
+        from z30fit import personal_names as pn
+
+        return getattr(pn, "PERSONAL_NAMES", {}) or {}
+    except Exception:
+        return {}
+
+
+def _apply_personal(item: dict, pid: str, neutral_name: str, neutral_cam: str, desc: str) -> None:
+    ov = _personal_overrides().get(pid)
+    if not ov:
+        return
+    item["name"] = ov.get("name") or neutral_name
+    item["cam"] = ov.get("cam") or neutral_cam
+    # 中性风格名保留在说明里，方便对照（「胶片 01 · 提亮」这类）
+    item["desc"] = f"「{ov.get('style') or neutral_name}」· {desc}"
+
+
 def listing() -> list[dict]:
     global _LISTING
     if _LISTING is None:
@@ -61,12 +86,14 @@ def listing() -> list[dict]:
             curve = curve_from_pts(p["pts"])
             # 界面那个小缩略曲线：17 个采样点，0..1000
             spark = np.interp(np.linspace(0.0, 1.0, 17), np.linspace(0.0, 1.0, curve.size), curve)
-            out.append({
+            item = {
                 "id": p["id"], "name": p["name"], "cat": p["cat"], "desc": p["desc"],
                 "base": p.get("base", ""), "params": p.get("params", {}),
                 "cam": p.get("cam", ""), "builtin": True, "group": "ncp",
                 "spark": [int(round(float(v) * 1000)) for v in spark],
-            })
+            }
+            _apply_personal(item, p["id"], p["name"], p.get("cam", ""), p["desc"])
+            out.append(item)
         _LISTING = out
     return _LISTING
 
@@ -74,5 +101,7 @@ def listing() -> list[dict]:
 def get(pid: str) -> dict | None:
     for p in NCP_PRESETS:
         if p["id"] == pid:
-            return {**p, "table": table_from_pts(p["pts"]), "builtin": True, "group": "ncp"}
+            item = {**p, "table": table_from_pts(p["pts"]), "builtin": True, "group": "ncp"}
+            _apply_personal(item, p["id"], p["name"], p.get("cam", ""), p["desc"])
+            return item
     return None

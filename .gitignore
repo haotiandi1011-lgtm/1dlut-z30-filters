@@ -46,3 +46,7 @@ android/captures/
 软著材料/
 # 软著申请工具（个人材料工具，不入库；保留在本地）
 tools/gen_copyright_*.py
+# 个人使用版（含厂商/型号名，只在本机使用，不入库）
+z30fit/personal_names.py
+tools/gen_personal_build.py
+dist-personal/

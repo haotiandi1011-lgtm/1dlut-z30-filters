@@ -109,7 +109,8 @@ def main() -> int:
     OUT.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
     size = OUT.stat().st_size
-    print(f"✓ {OUT.relative_to(ROOT)}")
+    shown = OUT.relative_to(ROOT) if OUT.is_relative_to(ROOT) else OUT
+    print(f"✓ {shown}")
     print(f"  {len(items)} 套 · {size / 1024:.0f} KB")
     cats: dict[str, int] = {}
     for i in items:
