@@ -74,7 +74,8 @@ def _apply_personal(item: dict, pid: str, neutral_name: str, neutral_cam: str, d
         return
     item["name"] = ov.get("name") or neutral_name
     item["cam"] = ov.get("cam") or neutral_cam
-    # 中性风格名保留在说明里，方便对照（「胶片 01 · 提亮」这类）
+    # 中性风格名单独给一个字段：桌面端拼进说明、安卓端放在副标题里
+    item["style"] = ov.get("style") or ""
     item["desc"] = f"「{ov.get('style') or neutral_name}」· {desc}"
 
 

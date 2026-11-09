@@ -49,7 +49,8 @@ def payload_params(raw: dict | None) -> dict:
     return out
 
 
-def make_entry(pid: str, name: str, cat: str, desc: str, cam: str, table, raw_params: dict | None) -> dict:
+def make_entry(pid: str, name: str, cat: str, desc: str, cam: str, table, raw_params: dict | None,
+               style: str = "") -> dict:
     params = payload_params(raw_params)
     payload = pl.build_payload_614(
         table.astype("float64") / LUT_MAX,
@@ -70,6 +71,7 @@ def make_entry(pid: str, name: str, cat: str, desc: str, cam: str, table, raw_pa
         "cat": cat,
         "desc": desc,
         "cam": cam,
+        "style": style,
         "params": params,
         "payload": base64.b64encode(payload).decode("ascii"),
     }
@@ -90,7 +92,7 @@ def main() -> int:
         full = ncp_presets.get(p["id"])
         items.append(make_entry(
             p["id"], p["name"], p.get("cat", "配方库"), p["desc"],
-            p["cam"], full["table"], p.get("params"),
+            p["cam"], full["table"], p.get("params"), p.get("style", ""),
         ))
 
     # 机身名不能撞（同一个槽位两个同名预设，用户分不清）

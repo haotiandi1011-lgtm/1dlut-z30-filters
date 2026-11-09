@@ -21,13 +21,15 @@ class BuiltinPreset(
     val desc: String,
     val cam: String,
     val payload: ByteArray,
+    /** 中性风格名（个人版用原名显示时，这一行解释它对应哪种风格；空则退回分类名）。 */
+    val style: String = "",
 ) {
     val parsed: Payload.Parsed by lazy { Payload.parse(payload) }
     val lut: IntArray get() = parsed.lut
     val params: Map<String, Float> get() = parsed.params
 
-    /** 列表里显示的第二行：分类 + 机身名（写进机身的就是这个）。 */
-    val subtitle: String get() = "$cat · $cam"
+    /** 列表里显示的第二行：有风格名就先给风格名（个人版），否则分类；末尾都带机身名。 */
+    val subtitle: String get() = if (style.isNotBlank()) "「$style」· $cam" else "$cat · $cam"
 
     /**
      * 落成 `.z30` 时带的元数据。载荷才是唯一真值，这里只是让人在配方列表里认得出它。
@@ -96,6 +98,7 @@ class BuiltinPresetStore(private val context: Context) {
                     cat = obj.optString("cat").ifBlank { "内置预设" },
                     desc = obj.optString("desc"),
                     cam = cam,
+                    style = obj.optString("style"),
                     payload = payload,
                 )
             }
