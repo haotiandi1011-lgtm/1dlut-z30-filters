@@ -85,6 +85,10 @@
   .prow .sw{width:28px;height:22px;flex:0 0 auto;display:block}
   .prow .nm{flex:1 1 auto;min-width:0;font-size:12.8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .prow .tag{flex:0 0 auto;font-size:10px;color:#8b93a1;background:#f2f4f7;border-radius:5px;padding:1px 5px}
+  .prow .ren{flex:0 0 auto;width:18px;height:18px;line-height:16px;text-align:center;border-radius:5px;
+    color:#c2c8d0;font-size:12px;visibility:hidden;cursor:pointer}
+  .prow:hover .ren{visibility:visible}
+  .prow .ren:hover{background:#e8efff;color:#2563eb}
   .prow .del{flex:0 0 auto;width:18px;height:18px;line-height:16px;text-align:center;border-radius:5px;
     color:#c2c8d0;font-size:14px;visibility:hidden}
   .prow:hover .del{visibility:visible}
@@ -965,6 +969,18 @@ function sparkSvg(spark){
       stroke-linejoin="round" stroke-linecap="round"/></svg>`;
 }
 
+async function renamePreset(id){
+  const p = S.presets.find(x => x.id === id);
+  if(!p) return;
+  const next = prompt(`给「${p.name}」起个新名字（留空 = 恢复原名）`, p.name);
+  if(next === null) return;
+  const q = new URLSearchParams({id, name: (next || '').trim()});
+  const d = await api('/api/preset_rename?' + q.toString(), {method:'POST'});
+  if(!d.ok){ toast(d.message || '改名失败', 'err'); return; }
+  toast(d.reset ? '已恢复原名' : '已改名为「' + d.name + '」', 'ok');
+  await loadPresets();
+}
+
 function presetRow(p){
   const el = document.createElement('button');
   el.type = 'button';
@@ -977,8 +993,10 @@ function presetRow(p){
   const lead = S.manage
     ? `<span class="ck">${S.sel.has(p.id) ? '✓' : ''}</span>`
     : sparkSvg(p.spark);
+  const ren = S.manage ? ''
+    : `<span class="ren" data-ren="${esc(p.id)}" title="改名（内置也可改，留空恢复原名）">✎</span>`;
   el.innerHTML = lead + `<span class="nm">${esc(p.name)}</span>` +
-                 (tag ? `<span class="tag">${esc(tag)}</span>` : '') + del;
+                 (tag ? `<span class="tag">${esc(tag)}</span>` : '') + ren + del;
   el.title = (p.desc || p.name) + (p.params ? '\n参数：' + fmtParams(p.params) : '');
   el.onclick = (e) => {
     if(S.manage){
@@ -986,6 +1004,8 @@ function presetRow(p){
       renderPresetList();
       return;
     }
+    const renId = e.target && e.target.dataset ? e.target.dataset.ren : null;
+    if(renId) return renamePreset(renId);
     const id = e.target && e.target.dataset ? e.target.dataset.del : null;
     if(id) return deletePreset(id);
     pickPreset(p);

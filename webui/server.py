@@ -749,6 +749,8 @@ class Handler(BaseHTTPRequestHandler):
 
                 pid = q.get("id", [""])[0]
                 return _json(self, {"ok": presets.delete_user(pid)})
+
+
             if path == "/api/env":
                 from z30fit import paths
 
@@ -828,6 +830,25 @@ class Handler(BaseHTTPRequestHandler):
                 from z30fit import presets
 
                 return _json(self, {"ok": presets.delete_user(q.get("id", [""])[0])})
+            if path == "/api/preset_rename":
+                # 逐条改名：内置/配方库存别名（不动内置数据），我的预设直接改 name。
+                # id 永远不变——老用户的隐藏/回收站记录都挂在 id 上。
+                from z30fit import ncp_presets, presets
+
+                pid = q.get("id", [""])[0]
+                name = (q.get("name", [""])[0] or "").strip()
+                if not pid:
+                    return _json(self, {"ok": False, "message": "缺少 id"})
+                if len(name) > 40:
+                    return _json(self, {"ok": False, "message": "名字最多 40 个字"})
+                is_builtin = any(p["id"] == pid for p in presets.BUILTIN) or pid.startswith("ncp-")
+                if is_builtin:
+                    applied = presets.set_alias(pid, name)
+                    return _json(self, {"ok": True, "name": applied, "reset": not applied})
+                applied = presets.rename_user(pid, name)
+                return _json(self, {"ok": bool(applied), "name": applied,
+                                    "message": "" if applied else "没找到这条预设，或名字为空"})
+
             if path == "/api/fit":
                 src = q.get("src", [""])[0]
                 mode = q.get("mode", ["auto"])[0]

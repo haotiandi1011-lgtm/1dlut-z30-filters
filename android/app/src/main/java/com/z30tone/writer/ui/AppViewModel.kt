@@ -351,6 +351,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         log("已恢复全部隐藏的预设")
     }
 
+    /** 内置/配方库改名：只写本地别名，不动打包数据；空名字 = 恢复原名。 */
+    fun renamePreset(preset: BuiltinPreset, newName: String) {
+        val applied = builtinStore.setAlias(preset.id, newName)
+        loadBuiltins()
+        _state.update {
+            it.copy(
+                message = if (applied.isEmpty()) "「${preset.name}」已恢复原名"
+                else "已把「${preset.name}」改名为「$applied」"
+            )
+        }
+    }
+
+    /** 我的配方改名：改文件里的元数据 name，载荷与文件名不变。 */
+    fun renameRecipe(item: RecipeStore.Item, newName: String) {
+        val name = newName.trim()
+        if (name.isEmpty()) return
+        runCatching { recipes.rename(item, name) }
+            .onSuccess { updated ->
+                refreshRecipes(updated.name)
+                _state.update { it.copy(message = "已改名为「${updated.name}」") }
+            }
+            .onFailure { e ->
+                _state.update { it.copy(message = "改名失败：${e.message ?: "写不进文件"}") }
+            }
+    }
+
     fun restorePreset(id: String) {
         val hidden = builtinStore.unhide(listOf(id))
         _state.update { it.copy(hiddenPresetIds = hidden) }

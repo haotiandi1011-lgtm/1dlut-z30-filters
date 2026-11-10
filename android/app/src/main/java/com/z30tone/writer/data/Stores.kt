@@ -102,6 +102,26 @@ class RecipeStore(private val context: Context) {
         return read(target)
     }
 
+    /**
+     * 改名：只改元数据里的 name，载荷与文件名（按载荷哈希）都不动，
+     * 「同一条配方反复导入去重」的逻辑不受影响。
+     */
+    fun rename(item: Item, newName: String): Item {
+        val clean = newName.trim().take(40)
+        require(clean.isNotEmpty()) { "名字不能为空" }
+        val raw = item.file.readBytes()
+        val pkg = Recipe.parse(raw)
+        val meta = org.json.JSONObject(Recipe.metaJson(raw)).put("name", clean)
+        val out = Recipe.build(pkg.payload, meta.toString())
+        val tmp = File(item.file.parentFile, item.file.name + ".tmp")
+        tmp.writeBytes(out)
+        if (!tmp.renameTo(item.file)) {
+            item.file.delete()
+            if (!tmp.renameTo(item.file)) throw IllegalStateException("改名失败：写不进文件")
+        }
+        return read(item.file)
+    }
+
     /** 移入回收站（不是真删）。同名文件先清掉，避免恢复时串包。 */
     fun delete(item: Item): Boolean {
         val target = File(trashDir, item.file.name)

@@ -62,6 +62,17 @@ object Recipe {
         return Package(payload, parseMeta(metaText))
     }
 
+    /** 取出元数据原文（改名时只在原文上改 name，其余字段原样保留）。 */
+    fun metaJson(raw: ByteArray): String {
+        if (!matches(raw)) throw IllegalArgumentException("不是 .z30 配方包")
+        val metaLength = readIntLe(raw, 8)
+        val maxMetaLength = raw.size - HEADER - Payload.SIZE
+        if (metaLength < 0 || metaLength > maxMetaLength) {
+            throw IllegalArgumentException("配方包的元数据长度异常（$metaLength）")
+        }
+        return String(raw, HEADER, metaLength, Charsets.UTF_8)
+    }
+
     fun build(payload: ByteArray, metaJson: String): ByteArray {
         require(payload.size == Payload.SIZE) { "载荷必须是 ${Payload.SIZE} 字节" }
         val meta = metaJson.toByteArray(Charsets.UTF_8)

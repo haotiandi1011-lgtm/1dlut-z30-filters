@@ -229,6 +229,58 @@ def _trash_path() -> Path:
     return data_root() / "presets_trash.json"
 
 
+def _alias_path() -> Path:
+    """内置预设的本地别名表：只改显示名，不动内置数据与 id。"""
+    return _user_path().parent / "presets_aliases.json"
+
+
+def load_aliases() -> dict[str, str]:
+    path = _alias_path()
+    if not path.is_file():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return {str(k): str(v) for k, v in raw.items() if str(v).strip()}
+    except Exception:
+        return {}
+
+
+def _write_aliases(aliases: dict[str, str]) -> None:
+    _alias_path().write_text(
+        json.dumps(aliases, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
+    global _LISTING_CACHE
+    _LISTING_CACHE = None
+
+
+def set_alias(pid: str, name: str) -> str:
+    """给内置/配方库条目起本地别名。空名字 = 恢复原名。"""
+    aliases = load_aliases()
+    clean = (name or "").strip()[:40]
+    if clean:
+        aliases[pid] = clean
+    else:
+        aliases.pop(pid, None)
+    _write_aliases(aliases)
+    return clean
+
+
+def rename_user(pid: str, name: str) -> str:
+    """给「我的预设」改名：只改 name 字段，id 与曲线保持不变。"""
+    clean = (name or "").strip()[:40]
+    if not clean:
+        return ""
+    items = load_user()
+    for item in items:
+        if item.get("id") == pid:
+            item["name"] = clean
+            _write_user(items)
+            global _LISTING_CACHE
+            _LISTING_CACHE = None
+            return clean
+    return ""
+
+
 def load_user() -> list[dict]:
     p = _user_path()
     if not p.exists():
@@ -394,10 +446,14 @@ def delete_user(pid: str) -> bool:
 
 
 def get(pid: str) -> dict | None:
+    aliases = load_aliases()
     for p in BUILTIN:
         if p["id"] == pid:
             y = curve_from_spec(p["spec"])
-            return {**p, "table": quantize_curve(y), "builtin": True}
+            out = {**p, "table": quantize_curve(y), "builtin": True}
+            if pid in aliases:
+                out["name"] = aliases[pid]
+            return out
     for p in load_user():
         if p["id"] == pid:
             return {**p, "table": np.asarray(p["table"], dtype=np.uint16), "builtin": False}
@@ -432,5 +488,9 @@ def listing() -> list[dict]:
             out.append({"id": p["id"], "name": p["name"], "desc": p["desc"], "builtin": False,
                         "group": "user", "cat": "我的预设",
                         "spark": sparkline(np.asarray(p["table"], dtype=np.float64))})
+        aliases = load_aliases()
+        for item in out:
+            if item["id"] in aliases:
+                item["name"] = aliases[item["id"]]
         _LISTING_CACHE = out
     return _LISTING_CACHE

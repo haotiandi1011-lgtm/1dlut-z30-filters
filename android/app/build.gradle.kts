@@ -14,7 +14,7 @@ android {
         targetSdk = 35
         // versionCode 只增不减（内部构建号）：0.2.0 之前已有 versionCode 3 的测试包
         // 装在真机上，回退会让测试者被迫卸载重装、丢掉本地配方与备份。
-        versionCode = 4
+        versionCode = 6
         versionName = "0.2.1"
     }
 

@@ -163,6 +163,7 @@ fun WriterScreen(viewModel: AppViewModel) {
             onHide = { ids -> viewModel.hidePresets(ids) },
             onRestoreAll = { viewModel.restorePresets() },
             onRestoreOne = { id -> viewModel.restorePreset(id) },
+            onRename = { preset, name -> viewModel.renamePreset(preset, name) },
         )
     }
 
@@ -245,6 +246,7 @@ fun WriterScreen(viewModel: AppViewModel) {
             item {
                 RecipeCard(
                     state = state,
+                    onRename = viewModel::renameRecipe,
                     onImport = { picker.launch(arrayOf("*/*")) },
                     onSelect = viewModel::selectRecipe,
                     onDelete = viewModel::deleteRecipe,
@@ -918,7 +920,9 @@ private fun PresetLibraryDialog(
     onHide: (List<String>) -> Unit,
     onRestoreAll: () -> Unit,
     onRestoreOne: (String) -> Unit,
+    onRename: (BuiltinPreset, String) -> Unit,
 ) {
+    var renaming by remember { mutableStateOf<BuiltinPreset?>(null) }
     var query by remember { mutableStateOf("") }
     var managing by remember { mutableStateOf(false) }
     var showHidden by remember { mutableStateOf(false) }
@@ -1048,6 +1052,7 @@ private fun PresetLibraryDialog(
                                         managing = managing,
                                         checked = preset.id in selected,
                                         onPick = onPick,
+                                        onRename = { renaming = preset },
                                         onToggle = {
                                             selected = if (preset.id in selected) selected - preset.id
                                             else selected + preset.id
@@ -1064,6 +1069,19 @@ private fun PresetLibraryDialog(
             TextButton(onClick = onDismiss) { Text("关闭") }
         },
     )
+
+    renaming?.let { preset ->
+        RenameDialog(
+            title = "给「${preset.name}」改名",
+            initial = preset.name,
+            canReset = true,
+            onDismiss = { renaming = null },
+            onConfirm = { newName ->
+                renaming = null
+                onRename(preset, newName)
+            },
+        )
+    }
 }
 
 @Composable
@@ -1073,6 +1091,7 @@ private fun BuiltinRow(
     checked: Boolean,
     onPick: (BuiltinPreset) -> Unit,
     onToggle: () -> Unit,
+    onRename: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -1121,6 +1140,9 @@ private fun BuiltinRow(
             )
         }
         if (!managing) {
+            TextButton(onClick = onRename, contentPadding = PaddingValues(horizontal = 6.dp)) {
+                Text("改名", style = MaterialTheme.typography.labelSmall)
+            }
             Text(
                 text = "载入",
                 style = MaterialTheme.typography.labelSmall,
@@ -1153,6 +1175,7 @@ private fun HiddenRow(preset: BuiltinPreset, onRestore: () -> Unit) {
 private fun RecipeCard(
     state: UiState,
     onImport: () -> Unit,
+    onRename: (RecipeStore.Item, String) -> Unit,
     onSelect: (RecipeStore.Item) -> Unit,
     onDelete: (RecipeStore.Item) -> Unit,
     onDeleteMany: (List<RecipeStore.Item>) -> Unit,
@@ -1160,6 +1183,7 @@ private fun RecipeCard(
 ) {
     var managing by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var renaming by remember { mutableStateOf<RecipeStore.Item?>(null) }
     val trashCount = state.trashRecipes.size
 
     Section(
@@ -1227,10 +1251,24 @@ private fun RecipeCard(
                             }
                         },
                         onDelete = { onDelete(item) },
+                        onRename = { renaming = item },
                     )
                 }
             }
         }
+    }
+
+    renaming?.let { item ->
+        RenameDialog(
+            title = "给配方改名",
+            initial = item.name,
+            canReset = false,
+            onDismiss = { renaming = null },
+            onConfirm = { newName ->
+                renaming = null
+                onRename(item, newName)
+            },
+        )
     }
 }
 
@@ -1242,6 +1280,7 @@ private fun RecipeRow(
     checked: Boolean,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onRename: () -> Unit,
 ) {
     val background = if (selected && !managing) {
         MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
@@ -1303,9 +1342,47 @@ private fun RecipeRow(
             )
         }
         if (!managing) {
+            TextButton(onClick = onRename, contentPadding = PaddingValues(horizontal = 6.dp)) {
+                Text("改名", style = MaterialTheme.typography.labelSmall)
+            }
             TextButton(onClick = onDelete) { Text("删除", style = MaterialTheme.typography.labelSmall) }
         }
     }
+}
+
+@Composable
+private fun RenameDialog(
+    title: String,
+    initial: String,
+    canReset: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { if (it.length <= 40) text = it },
+                    singleLine = true,
+                    label = { Text("新名称（最多 40 字）") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (canReset) {
+                    Text(
+                        text = "留空保存 = 恢复原名。只改显示名，曲线、参数、机身名都不动。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text("保存") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }
 
 @Composable
