@@ -50,3 +50,14 @@ tools/gen_copyright_*.py
 z30fit/personal_names.py
 tools/gen_personal_build.py
 dist-personal/
+
+# iOS：Xcode 工程由 XcodeGen 从 project.yml 生成，不入库（避免 pbxproj 冲突）
+ios/Z30Tone.xcodeproj/
+ios/Payload/
+ios/build/
+ios/DerivedData/
+ios/*.ipa
+ios/*.xcarchive
+*.ipa
+# iOS 个人版的名称覆盖层（公开包不许带厂商名）
+ios/Z30Tone/Resources/personal_names.json

@@ -1,0 +1,83 @@
+name: iOS Build
+
+# 出未签名 ipa 给测试者侧载。本机是 Windows，没有 Xcode，所以这里就是唯一的出包通道。
+on:
+  workflow_dispatch:
+  push:
+    # 允许在 ios/* 分支上直接验证，不必先合进 main
+    branches: [main, "ios/**"]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-build.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 环境信息
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+
+      - name: 生成工程
+        working-directory: ios
+        run: |
+          xcodegen generate
+          xcodebuild -project Z30Tone.xcodeproj -list
+
+      # 金标准逐点校验在这里跑：256 点必须和桌面/安卓对齐，否则后面所有 UI 都白做
+      - name: 单元测试
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          DEVICE=$(xcrun simctl list devices available | grep -oE 'iPhone 1[0-9]( Pro)?' | head -1)
+          echo "模拟器：$DEVICE"
+          xcodebuild test \
+            -project Z30Tone.xcodeproj \
+            -scheme Z30Tone \
+            -destination "platform=iOS Simulator,name=$DEVICE" \
+            CODE_SIGNING_ALLOWED=NO \
+            CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}"
+
+      - name: 未签名构建
+        working-directory: ios
+        run: |
+          xcodebuild build \
+            -project Z30Tone.xcodeproj \
+            -scheme Z30Tone \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}"
+
+      - name: 打包 ipa
+        working-directory: ios
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Z30Tone.app Payload/
+          rm -rf Payload/Z30Tone.app/_CodeSignature
+          zip -qry Z30Tone-unsigned.ipa Payload
+          ls -lh Z30Tone-unsigned.ipa
+          echo "版本：$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Payload/Z30Tone.app/Info.plist) build $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Payload/Z30Tone.app/Info.plist)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Z30Tone-unsigned-ipa
+          path: ios/Z30Tone-unsigned.ipa
+          retention-days: 14
