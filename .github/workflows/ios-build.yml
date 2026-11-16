@@ -18,7 +18,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15
+    # macos-15 曾报 «Internal server error»（runner 侧），先换更成熟的 14
+    runs-on: macos-14
     timeout-minutes: 45
 
     steps:
@@ -28,6 +29,7 @@ jobs:
         run: |
           xcodebuild -version
           swift --version
+          xcrun simctl list devices available | grep -E "iPhone" | head -5
 
       - name: 安装 XcodeGen
         run: brew install xcodegen
@@ -35,14 +37,15 @@ jobs:
       - name: 生成工程
         working-directory: ios
         run: |
-          xcodegen generate
+          set -o pipefail
+          xcodegen generate 2>&1 | tee xcodegen.log
           xcodebuild -project Z30Tone.xcodeproj -list
 
       # 金标准逐点校验在这里跑：256 点必须和桌面/安卓对齐，否则后面所有 UI 都白做
       - name: 单元测试
         working-directory: ios
         run: |
-          set -euo pipefail
+          set -o pipefail
           DEVICE=$(xcrun simctl list devices available | grep -oE 'iPhone 1[0-9]( Pro)?' | head -1)
           echo "模拟器：$DEVICE"
           xcodebuild test \
@@ -50,11 +53,13 @@ jobs:
             -scheme Z30Tone \
             -destination "platform=iOS Simulator,name=$DEVICE" \
             CODE_SIGNING_ALLOWED=NO \
-            CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}"
+            CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}" \
+            2>&1 | tee test.log
 
       - name: 未签名构建
         working-directory: ios
         run: |
+          set -o pipefail
           xcodebuild build \
             -project Z30Tone.xcodeproj \
             -scheme Z30Tone \
@@ -64,9 +69,25 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}"
+            CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}" \
+            2>&1 | tee build.log
+
+      # 失败时把关键错误写进 Summary。作业日志必须登录才能下载，
+      # 但 Summary 直接渲染在页面上，外部 curl 就能取到。
+      - name: 失败摘要
+        if: failure()
+        working-directory: ios
+        run: |
+          {
+            echo "### 失败日志摘录"
+            echo '```'
+            grep -hE "error:|Testing failed|\*\* BUILD FAILED \*\*|\*\* TEST FAILED \*\*|The following build commands failed|Undefined symbol|Cannot find|Execution failed" \
+              xcodegen.log test.log build.log 2>/dev/null | head -80
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 打包 ipa
+        if: success()
         working-directory: ios
         run: |
           mkdir -p Payload
@@ -77,7 +98,20 @@ jobs:
           echo "版本：$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Payload/Z30Tone.app/Info.plist) build $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Payload/Z30Tone.app/Info.plist)"
 
       - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: Z30Tone-unsigned-ipa
           path: ios/Z30Tone-unsigned.ipa
           retention-days: 14
+
+      # 日志始终上传：失败了也能在 artifact 里看到完整输出
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-logs
+          path: |
+            ios/xcodegen.log
+            ios/test.log
+            ios/build.log
+          retention-days: 7
+          if-no-files-found: ignore
