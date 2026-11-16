@@ -18,8 +18,9 @@ permissions:
 
 jobs:
   build:
-    # macos-15 曾报 «Internal server error»（runner 侧），先换更成熟的 14
-    runs-on: macos-14
+    # macos-14 已于 2026-11-02 退役（标签直接被拒），只能用 15 / latest / 26。
+    # 15 之前报过一次 Internal server error，属 GitHub 侧故障，重试即可。
+    runs-on: macos-15
     timeout-minutes: 45
 
     steps:
