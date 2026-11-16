@@ -38,9 +38,8 @@ targets:
     platform: iOS
     sources:
       - path: Z30Tone/App
+      - path: Z30Tone/UI
       - path: Z30Tone/Resources
-      # UI 目录等第一张卡片落地后再加进来，避免空目录让 xcodegen 报错
-      # - path: Z30Tone/UI
     dependencies:
       - target: Z30ToneCore
         embed: true
