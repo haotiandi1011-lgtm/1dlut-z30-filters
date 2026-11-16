@@ -1,5 +1,4 @@
 import SwiftUI
-import Z30ToneCore
 
 @main
 struct Z30ToneApp: App {

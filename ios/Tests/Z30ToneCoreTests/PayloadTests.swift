@@ -1,5 +1,4 @@
 import XCTest
-@testable import Z30ToneCore
 
 /// 614 字节载荷的结构守卫。任何一条挂了，写进机身的都是废数据。
 final class PayloadTests: XCTestCase {

@@ -1,6 +1,5 @@
 import SwiftUI
 import UniformTypeIdentifiers
-import Z30ToneCore
 
 /// 配方卡：导入、选中、改名、删除（进回收站）。
 struct RecipeCard: View {

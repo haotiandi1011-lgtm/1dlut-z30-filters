@@ -2,7 +2,6 @@ import ImageIO
 import PhotosUI
 import SwiftUI
 import UIKit
-import Z30ToneCore
 
 /// 照片对比卡：左半边原图、右半边套上当前曲线，拖动分割线看差异。
 struct PhotoCompareCard: View {

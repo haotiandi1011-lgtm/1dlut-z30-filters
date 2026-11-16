@@ -1,5 +1,4 @@
 import XCTest
-@testable import Z30ToneCore
 
 /// **移植有没有跑偏的验收测试。**
 ///

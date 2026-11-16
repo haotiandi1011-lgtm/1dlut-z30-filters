@@ -1,5 +1,4 @@
 import XCTest
-@testable import Z30ToneCore
 
 /// `.z30` 配方包的格式守卫。
 final class RecipeTests: XCTestCase {

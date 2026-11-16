@@ -1,6 +1,5 @@
 import PhotosUI
 import SwiftUI
-import Z30ToneCore
 
 /// 照片拟合卡：选一张参考图 → 256 点曲线 → 指标与建议。
 struct PhotoFitCard: View {

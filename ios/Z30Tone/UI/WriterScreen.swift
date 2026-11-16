@@ -1,5 +1,4 @@
 import SwiftUI
-import Z30ToneCore
 
 /// 主界面。卡片顺序对齐安卓端 `WriterScreen.kt`：
 /// 照片拟合 → 预设库 → 照片对比 → 配方 → 导出 → 日志。

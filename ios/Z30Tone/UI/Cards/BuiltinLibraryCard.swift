@@ -1,5 +1,4 @@
 import SwiftUI
-import Z30ToneCore
 
 /// 内置预设库入口卡。显示总套数、已隐藏条数，以及当前选中的那一条。
 struct BuiltinLibraryCard: View {
