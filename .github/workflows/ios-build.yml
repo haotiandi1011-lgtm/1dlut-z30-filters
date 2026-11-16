@@ -18,9 +18,9 @@ permissions:
 
 jobs:
   build:
-    # macos-14 已于 2026-11-02 退役（标签直接被拒），只能用 15 / latest / 26。
-    # 15 之前报过一次 Internal server error，属 GitHub 侧故障，重试即可。
-    runs-on: macos-15
+    # macOS arm64 托管 runner 长期容量不足（"job was not acquired by Runner"），
+    # 改用 Intel 变体：同样带 Xcode，排队明显短，代价只是编译慢一点。
+    runs-on: macos-15-intel
     timeout-minutes: 45
 
     steps:
