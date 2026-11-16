@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Z30ToneCore
 
 /// 与安卓端 `FitUi` 同字段，界面上要显示的数字一一对应。
 /// 放在顶层（不嵌在 @MainActor 类里）是为了能安全地跨线程返回。
