@@ -66,6 +66,7 @@ PKT_END_DATA = 12
 OP_GET_DEVICE_INFO = 0x1001
 OP_OPEN_SESSION = 0x1002
 OP_CLOSE_SESSION = 0x1003
+OP_9010 = 0x9010
 OP_GET_PICT_CTRL = 0x90CC
 OP_SET_PICT_CTRL = 0x90CD
 
@@ -338,6 +339,17 @@ def describe_payload(payload: bytes) -> None:
     print(f"  单调不降：{'是' if rising else '否'}")
 
 
+def hexdump(data: bytes, limit: int = 96) -> str:
+    data = data[:limit]
+    lines = []
+    for i in range(0, len(data), 16):
+        row = data[i:i + 16]
+        hexpart = " ".join(f"{b:02x}" for b in row)
+        text = "".join(chr(b) if 0x20 <= b < 0x7F else "." for b in row)
+        lines.append(f"    {i:04x}  {hexpart:<47}  {text}")
+    return "\n".join(lines)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default=HOST)
@@ -345,6 +357,8 @@ def main() -> int:
     ap.add_argument("--slot", default="0xC9")
     ap.add_argument("--read", action="store_true", help="只读（默认）")
     ap.add_argument("--roundtrip", action="store_true", help="读出后原样写回，验证写通道")
+    ap.add_argument("--scan", action="store_true", help="把 0..8 与 0xC9..0xD1 全扫一遍")
+    ap.add_argument("--no-9010", action="store_true", help="跳过 0x9010（用于对比）")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
@@ -377,19 +391,45 @@ def main() -> int:
             mark = "✔" if code in info["ops"] else "✘"
             print(f"  0x{code:04X} {label}：{mark}")
 
+        # WTU 在 OpenSession 之后立刻发 0x9010(0x2001)。漏掉它时，
+        # 读槽位只有 36 字节、写入返回 PTPAccessDenied2，所以这一步是关键。
+        if args.no_9010:
+            print("\n-- 跳过 0x9010（对比模式）--")
+        else:
+            rcode, _ = cam.transact(OP_9010, (0x2001,))
+            print(f"\n-- 0x9010(0x2001)：{rc_text(rcode)} --")
+
         print(f"\n-- 读取槽位 0x{slot:02X} --")
         original = cam.get_pict_ctrl(slot)
         describe_payload(original)
+        if len(original) != 614:
+            print("  原始字节：")
+            print(hexdump(original))
+
+        if args.scan:
+            print("\n-- 扫描槽位 --")
+            for s in list(range(0, 9)) + list(range(0xC9, 0xD2)):
+                if s == slot:
+                    continue
+                try:
+                    d = cam.get_pict_ctrl(s)
+                    flag = " ← 614" if len(d) == 614 else ""
+                    print(f"  0x{s:02X}: {len(d):>3} 字节{flag}")
+                except Exception as exc:  # noqa: BLE001
+                    print(f"  0x{s:02X}: 失败 {type(exc).__name__}: {exc}")
 
         if args.roundtrip:
-            print(f"\n-- 原样写回（内容不变，只为验证写通道）--")
-            cam.set_pict_ctrl(slot, original)
-            print("  写入返回 OK")
-            again = cam.get_pict_ctrl(slot)
-            same = again == original
-            print(f"  回读比对：{'逐字节一致 ✔' if same else '不一致 ✘'}")
-            if not same:
-                print(f"    原 {len(original)} 字节，回读 {len(again)} 字节")
+            if len(original) != 614:
+                print(f"\n[跳过写测试] 读到的不是 614 字节，不确定是载荷，不敢写回")
+            else:
+                print("\n-- 原样写回（内容不变，只为验证写通道）--")
+                cam.set_pict_ctrl(slot, original)
+                print("  写入返回 OK")
+                again = cam.get_pict_ctrl(slot)
+                same = again == original
+                print(f"  回读比对：{'逐字节一致 ✔' if same else '不一致 ✘'}")
+                if not same:
+                    print(f"    原 {len(original)} 字节，回读 {len(again)} 字节")
 
         print("\n结论：Wi-Fi 通道可用。")
         return 0
