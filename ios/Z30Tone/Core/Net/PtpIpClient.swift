@@ -11,8 +11,10 @@ import Foundation
 ///   操作应答  = 类型 7 + 操作码 2 + 事务号 4 + 参数 4*n
 ///   数据阶段  = StartData 9 / Data 10 / EndData 12，均带 4 字节事务号
 ///
-/// 主机 ID 是相机「记住」的凭据。这里复刻的是本机 WTU 配对时用的那一个；
-/// 换成别的值相机会在握手阶段直接断开。
+/// 主机 ID 是相机「记住」的凭据。实测结论（Z30 V1.20）：
+/// 相机新建的网络配置文件处于「未认领」状态时，任意主机都能握手并读写；
+/// 一旦被某台主机连过，后续只认那一个 ID，其他 ID 会收到 Init_Fail。
+/// 因此本类使用「首次启动生成并持久化」的随机身份，而不是写死某个值。
 ///
 /// 槽位编号与 USB 不同：Wi-Fi 下 0xC9–0xCF 返回 36 字节的内置影调描述符，
 /// 真正的 614 字节自定义载荷从 0xD0 起。所以这里不硬编码，而是扫描后按顺序
@@ -63,19 +65,42 @@ final class PtpIpClient: @unchecked Sendable {
     static let defaultHost = "192.168.1.1"
     static let defaultPort: UInt16 = 15740
 
-    /// 官方 WTU 发出的 Init Command Request 包体，逐字节复刻（56 字节）。
-    private static let initBody: [UInt8] = [
-        0x01, 0x00, 0x00, 0x00,                          // 类型 1
-        0x95, 0x67, 0x0F, 0x1D,                          // 连接号
-        0x9D, 0x45, 0xD4, 0x4A, 0x9D, 0xB6, 0xA2, 0xC4,  // 主机 ID（12 字节）
-        0x5F, 0xCD, 0xE7, 0x13,
-        0x4C, 0x00, 0x41, 0x00, 0x50, 0x00, 0x54, 0x00,  // "LAPTOP-2QHRJOR1"
-        0x4F, 0x00, 0x50, 0x00, 0x2D, 0x00, 0x32, 0x00,
-        0x51, 0x00, 0x48, 0x00, 0x52, 0x00, 0x4A, 0x00,
-        0x4F, 0x00, 0x52, 0x00, 0x31, 0x00,
-        0x00, 0x00,                                      // 名字结束
-        0x00, 0x00, 0x01, 0x00                           // 协议版本 1.0
-    ]
+    /// 本机身份：12 字节主机 ID + 主机名。首次启动时随机生成并持久化。
+    ///
+    /// 实测（Z30 V1.20）：相机新建的网络配置文件处于「未认领」状态时，
+    /// **任意主机都能握手成功并读写槽位**；一旦被某台主机连过，它只认那一个 ID。
+    /// 所以身份必须在安装时生成一次并固定下来，不能每次连接都换。
+    private let hostID: Data
+    private let hostName: String
+
+    init(hostID: Data, hostName: String) {
+        self.hostID = hostID
+        self.hostName = hostName
+    }
+
+    /// 按实测格式拼 Init Command Request 包体（56 字节）。
+    /// 格式：类型4(=1) + 连接号4 + 主机ID12 + UTF-16名 + NUL + 版本4
+    private static func makeInitBody(hostID: Data, hostName: String, conn: UInt32) -> Data {
+        var body = Data()
+        body.append(le32(1))
+        body.append(le32(conn))
+        body.append(hostID.prefix(12))
+        for unit in hostName.utf16 {
+            body.append(UInt8(unit & 0xFF))
+            body.append(UInt8((unit >> 8) & 0xFF))
+        }
+        body.append(contentsOf: [0x00, 0x00])
+        body.append(le32(0x0001_0000))
+        return body
+    }
+
+    /// 生成一个随机身份。主机名保持 ASCII，避免相机端显示乱码。
+    static func randomIdentity() -> (hostID: Data, hostName: String) {
+        var bytes: [UInt8] = []
+        for _ in 0..<12 { bytes.append(UInt8.random(in: 0...255)) }
+        let suffix = bytes.suffix(2).map { String(format: "%02X", $0) }.joined()
+        return (Data(bytes), "Z30TONE-\(suffix)")
+    }
 
     private var fd: Int32 = -1
     private var connNumber: UInt32 = 1
@@ -134,7 +159,8 @@ final class PtpIpClient: @unchecked Sendable {
 
     @discardableResult
     func handshake() throws -> String {
-        try sendPacket(Data(Self.initBody))
+        let body = Self.makeInitBody(hostID: hostID, hostName: hostName, conn: UInt32.random(in: 1...0xFFFF_FFFF))
+        try sendPacket(body)
         let (type, body) = try receivePacket()
 
         if type == 5 {

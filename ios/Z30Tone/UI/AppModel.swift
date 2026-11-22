@@ -103,9 +103,44 @@ final class AppModel: ObservableObject {
     /// 最近一次写入的逐字节比对结论。
     @Published private(set) var lastWriteResult: String?
 
+    /// 本机在相机上的身份，首次启动随机生成并持久化。
+    /// 相机只会记住第一个连上它的主机 ID，所以这个值不能每次变。
+    @Published private(set) var hostIDText = ""
+
+    private let identity: (hostID: Data, hostName: String)
     private let store: RecipeStore
     private let overrides: PresetOverrides
     private var client: PtpIpClient?
+
+    private static let identityIDKey = "ptp.hostID"
+    private static let identityNameKey = "ptp.hostName"
+
+    private static func loadIdentity() -> (hostID: Data, hostName: String) {
+        let defaults = UserDefaults.standard
+        if let hex = defaults.string(forKey: identityIDKey),
+           let data = dataFromHex(hex),
+           data.count == 12,
+           let name = defaults.string(forKey: identityNameKey),
+           !name.isEmpty {
+            return (data, name)
+        }
+        let made = PtpIpClient.randomIdentity()
+        defaults.set(made.hostID.map { String(format: "%02x", $0) }.joined(), forKey: identityIDKey)
+        defaults.set(made.hostName, forKey: identityNameKey)
+        return made
+    }
+
+    private static func dataFromHex(_ hex: String) -> Data? {
+        var out = Data()
+        var i = hex.startIndex
+        while i < hex.endIndex {
+            guard let j = hex.index(i, offsetBy: 2, limitedBy: hex.endIndex),
+                  let byte = UInt8(hex[i..<j], radix: 16) else { return nil }
+            out.append(byte)
+            i = j
+        }
+        return out
+    }
 
     var selectedRecipe: RecipeItem? {
         guard let id = selectedRecipeID else { return nil }
@@ -127,6 +162,9 @@ final class AppModel: ObservableObject {
     init(store: RecipeStore = RecipeStore(), overrides: PresetOverrides = PresetOverrides()) {
         self.store = store
         self.overrides = overrides
+        let loaded = Self.loadIdentity()
+        self.identity = loaded
+        self.hostIDText = loaded.hostID.map { String(format: "%02X", $0) }.joined()
         load()
     }
 
@@ -190,7 +228,7 @@ final class AppModel: ObservableObject {
         busyText = "正在连接相机…"
         lastWriteResult = nil
         let target = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cam = PtpIpClient()
+        let cam = PtpIpClient(hostID: identity.hostID, hostName: identity.hostName)
         client?.close()
         client = cam
 
