@@ -123,24 +123,35 @@ if ($probe) {
 
 Write-Host "2/5  Reset packet filter (all traffic to/from $camIp) ..."
 # Clear any capture session left behind by an earlier failed run, otherwise the
-# new start silently does nothing.
+# new start silently does nothing. Stop twice with a pause: the first stop may
+# still be tearing down while the file handle is released.
+pktmon stop | Out-Null
+Start-Sleep -Seconds 2
 pktmon stop | Out-Null
 pktmon filter remove | Out-Null
 pktmon filter add CAMERA -i $camIp
 
 Write-Host "3/5  Start capture ..."
-# Delete both the etl and any stale pcap, otherwise a failed run would leave the
-# old pcap behind and we could mistake it for a fresh capture.
-if (Test-Path "$out\wtu.etl") { Remove-Item "$out\wtu.etl" -Force }
-if (Test-Path "$out\wtu.pcap") { Remove-Item "$out\wtu.pcap" -Force }
+# Use a unique file name per run. A leftover pktmon session can keep a handle on
+# the old file, so deleting a fixed name sometimes silently fails and we end up
+# reading yesterday's capture.
+$stamp = Get-Date -Format "HHmmss"
+$etl = "$out\wtu-$stamp.etl"
+$pcap = "$out\wtu-$stamp.pcap"
+foreach ($f in (Get-ChildItem $out -Filter "*.etl" -ErrorAction SilentlyContinue)) {
+    Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
+}
+foreach ($f in (Get-ChildItem $out -Filter "*.pcap" -ErrorAction SilentlyContinue)) {
+    Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
+}
 # NOTE: the flag is --file-name (not --file).
-pktmon start --capture --pkt-size 0 --file-name "$out\wtu.etl"
+pktmon start --capture --pkt-size 0 --file-size 256 --file-name $etl
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: pktmon could not start (exit code $LASTEXITCODE)." -ForegroundColor Red
     Read-Host "Press Enter to close"
     exit 2
 }
-Write-Host "     pktmon started, target file $out\wtu.etl"
+Write-Host "     pktmon started, target file $etl"
 
 # pktmon creates the etl file lazily, on the first captured packet. If nothing is
 # flowing, the file simply does not exist yet - so do not treat that as failure.
@@ -233,26 +244,29 @@ if ($newConn) {
 
 Write-Host "5/5  Stop capture and convert ..."
 pktmon stop | Out-Null
-Start-Sleep -Seconds 1
+Start-Sleep -Seconds 2
 pktmon filter remove | Out-Null
 
-if (Test-Path "$out\wtu.etl") {
-    $etlSize = (Get-Item "$out\wtu.etl").Length
+if (Test-Path $etl) {
+    $etlSize = (Get-Item $etl).Length
     Write-Host "     etl: $etlSize bytes"
-    pktmon etl2pcap "$out\wtu.etl" -o "$out\wtu.pcap" | Out-Null
-    if (Test-Path "$out\wtu.pcap") {
-        $size = (Get-Item "$out\wtu.pcap").Length
+    # Keep the conversion output: it prints the packet count, which tells us at a
+    # glance whether anything was actually captured.
+    $conv = pktmon etl2pcap $etl -o $pcap 2>&1
+    $conv | ForEach-Object { Write-Host "     $_" }
+    if (Test-Path $pcap) {
+        $size = (Get-Item $pcap).Length
         Write-Host ""
-        Write-Host "DONE: $out\wtu.pcap  ($size bytes)" -ForegroundColor Green
+        Write-Host "DONE: $pcap  ($size bytes)" -ForegroundColor Green
         if ($size -lt 400) {
-            Write-Host "NOTE: the file is almost empty, so nothing was captured." -ForegroundColor Yellow
+            Write-Host "NOTE: file is almost empty - nothing was captured on this run." -ForegroundColor Yellow
         }
         Write-Host "Now switch Wi-Fi back to your normal network and tell me it is done."
     } else {
         Write-Host "ERROR: pcap was not produced." -ForegroundColor Red
     }
 } else {
-    Write-Host "ERROR: capture file missing." -ForegroundColor Red
+    Write-Host "ERROR: capture file missing ($etl)." -ForegroundColor Red
 }
 
 Write-Host ""
