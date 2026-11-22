@@ -40,11 +40,42 @@ if (-not ($wlan -match "Z_30|Z 30|NIKON_Z")) {
     Write-Host "     Connect to the camera network first, or continue anyway." -ForegroundColor Yellow
 }
 
-Write-Host "1/5  Closing every WTU-related process ..."
+Write-Host "0.5/5 Making sure Nikon discovery services are alive ..."
+# WTU cannot see the camera without these two. NkPtpEnumWT3 is the camera
+# enumerator (NkPtpEnum.exe): it has ErrorControl=1, so once it dies it never
+# comes back by itself, and WTU then just says "check the camera connection"
+# without ever opening a TCP connection.
+# NEVER kill NkPtpEnum: it is a service, not a helper process.
+function Ensure-NikonServices {
+    foreach ($svcName in @("Nkdnssd Service", "NkPtpEnumWT3")) {
+        $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
+        if (-not $svc) {
+            Write-Host "     $svcName : not installed" -ForegroundColor Yellow
+            continue
+        }
+        if ($svc.Status -eq "Running") {
+            Write-Host "     $svcName : running" -ForegroundColor Green
+        } else {
+            try {
+                Start-Service -Name $svcName -ErrorAction Stop
+                Start-Sleep -Seconds 1
+                $svc.Refresh()
+                Write-Host "     $svcName : started (now $($svc.Status))" -ForegroundColor Green
+            } catch {
+                Write-Host "     $svcName : FAILED to start - $($_.Exception.Message)" -ForegroundColor Red
+            }
+        }
+    }
+}
+
+Ensure-NikonServices
+
+Write-Host "1/5  Closing WTU processes (but NOT the enumerator service) ..."
 # The GUI is WirelessTransmitterUtility.exe, but the actual PTP/IP session is held
 # by NkPtpipStorage.exe (a helper). Killing only the GUI leaves an established TCP
 # session behind, and then the capture never contains an Init handshake.
-# So: kill whoever owns a connection to port 15740 first, then kill by name.
+# So: kill whoever owns a connection to port 15740 first, then kill the two GUI
+# side processes by name.
 $killed = @()
 # Only ESTABLISHED sessions. TIME_WAIT leftovers report Owner PID 0 or 4 (System),
 # and killing those would be catastrophic. Never kill ourselves either.
@@ -55,7 +86,7 @@ foreach ($c in $conns) {
         Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue
     }
 }
-$names = @("WirelessTransmitterUtility", "NkPtpipStorage", "NkPtpEnum", "NkMsgSender", "WTMessage", "WTMessageMain")
+$names = @("WirelessTransmitterUtility", "NkPtpipStorage")
 foreach ($n in $names) {
     Get-Process -Name $n -ErrorAction SilentlyContinue | ForEach-Object {
         if ($_.Id -ne $PID) {
@@ -76,6 +107,11 @@ if ($left) {
     exit 3
 }
 Write-Host "     no session to the camera remains (good)"
+
+# If the enumerator had held the session, it was killed above. Bring the discovery
+# services back before WTU starts, otherwise WTU has nothing to find the camera with.
+Write-Host "     re-checking discovery services after the kill ..."
+Ensure-NikonServices
 
 Write-Host "     probing ${camIp}:${camPort} ..."
 $probe = Test-NetConnection -ComputerName $camIp -Port $camPort -InformationLevel Quiet -WarningAction SilentlyContinue
