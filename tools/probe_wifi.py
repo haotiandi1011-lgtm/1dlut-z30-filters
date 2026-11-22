@@ -407,7 +407,10 @@ def main() -> int:
     ap.add_argument("--read", action="store_true", help="只读（默认）")
     ap.add_argument("--roundtrip", action="store_true", help="读出后原样写回，验证写通道")
     ap.add_argument("--scan", action="store_true", help="把 0..8 与 0xC9..0xD1 全扫一遍")
-    ap.add_argument("--no-9010", action="store_true", help="跳过 0x9010（用于对比）")
+    ap.add_argument("--list", action="store_true", help="扫 0xC0..0xE0，打印每个槽位的长度与名称，用于确定 C1..C9 编号")
+    ap.add_argument("--start", default="0xC0", help="--list 的起始槽位")
+    ap.add_argument("--end", default="0xE0", help="--list 的结束槽位")
+    ap.add_argument("--try-9010", action="store_true", help="额外测试 0x9010（会污染连接，默认不做）")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
@@ -442,6 +445,30 @@ def main() -> int:
 
         # 先不带 0x9010 读一次：这一版一定能拿到回应（36 字节），把它打出来
         # 才能判断这 36 字节到底是什么东西。
+        if args.list:
+            lo = int(args.start, 16) if str(args.start).lower().startswith("0x") else int(args.start)
+            hi = int(args.end, 16) if str(args.end).lower().startswith("0x") else int(args.end)
+            print(f"\n-- 扫描 0x{lo:02X}..0x{hi:02X}（只读）--")
+            found = []
+            for s in range(lo, hi + 1):
+                try:
+                    d = cam.get_pict_ctrl(s)
+                    if len(d) == 614:
+                        nm = "".join(chr(b) if 32 <= b < 127 else "." for b in d[2:22]).strip(". ")
+                        lut0 = struct.unpack_from(">H", d, 0x66)[0]
+                        lut128 = struct.unpack_from(">H", d, 0x66 + 128 * 2)[0]
+                        lut255 = struct.unpack_from(">H", d, 0x66 + 255 * 2)[0]
+                        found.append(s)
+                        print(f"  0x{s:02X}: 614  名称 {nm!r:<24} LUT {lut0}/{lut128}/{lut255}")
+                    else:
+                        asc = "".join(chr(b) if 32 <= b < 127 else "." for b in d)
+                        print(f"  0x{s:02X}: {len(d):>3}  {asc[:44]}")
+                except Exception as exc:  # noqa: BLE001
+                    print(f"  0x{s:02X}: 失败 {type(exc).__name__}: {exc}")
+            print(f"\n返回 614 字节的槽位：{[hex(x) for x in found]}")
+            print("这些就是可写的自定义槽位；36 字节的是内置影调描述符，不能写。")
+            return 0
+
         print(f"\n-- 读取槽位 0x{slot:02X}（未发 0x9010）--")
         before = cam.get_pict_ctrl(slot)
         describe_payload(before)
@@ -467,25 +494,17 @@ def main() -> int:
                 except Exception as exc:  # noqa: BLE001
                     print(f"  0x{s:02X}: 失败 {type(exc).__name__}: {exc}")
 
-        if args.no_9010:
-            print("\n-- 跳过 0x9010（对比模式）--")
-        else:
-            print("\n-- 发送 0x9010(0x2001)，然后重新读取 --")
+        if args.try_9010:
+            print("\n-- 测试 0x9010(0x2001)（已知会污染连接，仅用于排查）--")
             cam.send_9010_no_wait()
             time.sleep(1.5)
             try:
                 after = cam.get_pict_ctrl(slot)
                 print(f"  重新读取：{len(after)} 字节")
-                if len(after) == 614:
-                    describe_payload(after)
-                    best_slot, best_data = slot, after
-                elif after != before:
-                    print("  内容有变化，原始字节：")
-                    print(hexdump(after))
-                else:
-                    print("  与发送 0x9010 之前完全一致，说明这个操作没有改变读取结果")
             except Exception as exc:  # noqa: BLE001
                 print(f"  重新读取失败：{type(exc).__name__}: {exc}")
+        else:
+            print("\n-- 已跳过 0x9010（实测不需要它，发了反而会让下一次读取超时）--")
 
         if args.roundtrip:
             if best_slot is None:
