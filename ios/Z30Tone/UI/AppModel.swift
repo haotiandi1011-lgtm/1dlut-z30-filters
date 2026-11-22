@@ -32,6 +32,22 @@ struct ExportResult: Identifiable {
     let name: String
 }
 
+/// 设备信息跨线程带回主线程用。
+struct CameraInfoBox: Sendable {
+    let model: String
+    let firmware: String
+    let serial: String
+    let supportsRead: Bool
+    let supportsWrite: Bool
+}
+
+/// 一次连接的结果。
+private struct ConnectResult: Sendable {
+    let cameraName: String
+    let info: CameraInfoBox
+    let slots: [CameraSlot]
+}
+
 /// iOS 端的单一状态源。对标安卓 `AppViewModel`，但去掉 USB 相关（设备/槽位/写入/备份），
 /// 把出口换成「导出 .z30」。
 @MainActor
@@ -65,8 +81,25 @@ final class AppModel: ObservableObject {
 
     @Published var exportResult: ExportResult?
 
+    // MARK: - 相机连接状态
+
+    @Published var host = PtpIpClient.defaultHost
+    @Published private(set) var connected = false
+    @Published private(set) var cameraName = ""
+    @Published private(set) var cameraModel = ""
+    @Published private(set) var cameraFirmware = ""
+    @Published private(set) var supportsWrite = false
+    @Published private(set) var slots: [CameraSlot] = []
+    @Published private(set) var selectedSlot: Int?
+    @Published private(set) var slotPreview: ParsedPayload?
+    /// 每个槽位写入前的原始字节，供「还原」用。
+    @Published private(set) var backups: [Int: Data] = [:]
+    /// 最近一次写入的逐字节比对结论。
+    @Published private(set) var lastWriteResult: String?
+
     private let store: RecipeStore
     private let overrides: PresetOverrides
+    private var client: PtpIpClient?
 
     var selectedRecipe: RecipeItem? {
         guard let id = selectedRecipeID else { return nil }
@@ -119,6 +152,202 @@ final class AppModel: ObservableObject {
         sharp = params[.sharp] ?? 0
         clarity = params[.clarity] ?? 0
         saturation = params[.saturation] ?? 0
+    }
+
+    var selectedSlotLabel: String {
+        guard let id = selectedSlot, let slot = slots.first(where: { $0.id == id }) else { return "" }
+        return slot.label
+    }
+
+    /// 当前草稿 + 选中配方拼出来的 614 字节载荷。导出与写入共用。
+    private func currentPayload() -> Data? {
+        guard let item = selectedRecipe else {
+            message = "先在配方库里选一条"
+            return nil
+        }
+        var payload = Payload.withName(item.payload, draftName.isEmpty ? item.name : draftName)
+        if paramsEnabled {
+            payload = Payload.setParams(payload, [
+                .sharp: sharp,
+                .clarity: clarity,
+                .saturation: saturation,
+            ])
+        }
+        return payload
+    }
+
+    // MARK: - 相机 Wi-Fi
+
+    func connectCamera() {
+        guard !busy else { return }
+        busy = true
+        busyText = "正在连接相机…"
+        lastWriteResult = nil
+        let target = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cam = PtpIpClient()
+        client?.close()
+        client = cam
+
+        Task {
+            do {
+                let result = try await Task.detached(priority: .userInitiated) { () -> ConnectResult in
+                    try cam.connect(host: target)
+                    let name = try cam.handshake()
+                    try cam.openSession()
+                    let info = try cam.deviceInfo()
+                    let discovered = try cam.discoverSlots()
+                    return ConnectResult(
+                        cameraName: name,
+                        info: CameraInfoBox(
+                            model: info.model,
+                            firmware: info.firmware,
+                            serial: info.serial,
+                            supportsRead: info.supportsRead,
+                            supportsWrite: info.supportsWrite
+                        ),
+                        slots: discovered
+                    )
+                }.value
+
+                self.connected = true
+                self.cameraName = result.cameraName
+                self.cameraModel = result.info.model
+                self.cameraFirmware = result.info.firmware
+                self.supportsWrite = result.info.supportsWrite
+                self.slots = result.slots
+                self.busy = false
+                self.busyText = ""
+                self.log(
+                    "已连接「\(result.cameraName)」\(result.info.model) 固件 \(result.info.firmware)"
+                        + " · 可写槽位 \(result.slots.count) 个"
+                )
+                if result.slots.isEmpty {
+                    self.message = "相机连上了，但没有发现可写槽位。确认相机里有自定义 Picture Control"
+                } else {
+                    self.selectSlot(result.slots[0].id)
+                }
+            } catch {
+                self.busy = false
+                self.busyText = ""
+                self.connected = false
+                self.slots = []
+                self.message = error.localizedDescription
+                self.log("连接失败：\(error.localizedDescription)")
+                cam.close()
+            }
+        }
+    }
+
+    func disconnectCamera() {
+        let cam = client
+        client = nil
+        connected = false
+        slots = []
+        selectedSlot = nil
+        slotPreview = nil
+        backups = [:]
+        cameraName = ""
+        cameraModel = ""
+        cameraFirmware = ""
+        supportsWrite = false
+        Task.detached { cam?.close() }
+        log("已断开相机")
+    }
+
+    func selectSlot(_ slot: Int) {
+        selectedSlot = slot
+        loadSlotPreview(slot)
+    }
+
+    private func loadSlotPreview(_ slot: Int) {
+        guard let cam = client, connected else { return }
+        slotPreview = nil
+        Task {
+            do {
+                let data = try await Task.detached(priority: .userInitiated) {
+                    try cam.getPictCtrl(slot: slot)
+                }.value
+                if let parsed = try? Payload.parse(data) {
+                    self.slotPreview = parsed
+                }
+            } catch {
+                self.log("读槽位失败：\(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// 把当前配方写进选中槽位：写前备份原字节，写完立刻读回逐字节比对。
+    func writeToSelectedSlot() {
+        guard let cam = client, connected, let slot = selectedSlot else {
+            message = "先连接相机并选一个槽位"
+            return
+        }
+        guard let payload = currentPayload(), !busy else { return }
+        let label = selectedSlotLabel
+        busy = true
+        busyText = "正在写入 \(label)…"
+
+        Task {
+            do {
+                let result = try await Task.detached(priority: .userInitiated) { () -> (summary: String, original: Data) in
+                    let original = try cam.getPictCtrl(slot: slot)
+                    try cam.setPictCtrl(slot: slot, payload: payload)
+                    let readBack = try cam.getPictCtrl(slot: slot)
+                    return (Payload.diff(payload, readBack).summary, original)
+                }.value
+
+                if result.original.count == 614 {
+                    self.backups[slot] = result.original
+                }
+                self.lastWriteResult = result.summary
+                self.busy = false
+                self.busyText = ""
+                self.log("写入 \(label)：\(result.summary)")
+                if let parsed = try? Payload.parse(payload) {
+                    let updated = CameraSlot(
+                        id: slot,
+                        label: label,
+                        name: parsed.name,
+                        lutFirst: parsed.first,
+                        lutLast: parsed.last
+                    )
+                    self.slots = self.slots.map { $0.id == slot ? updated : $0 }
+                    self.slotPreview = parsed
+                }
+            } catch {
+                self.busy = false
+                self.busyText = ""
+                self.message = error.localizedDescription
+                self.log("写入失败：\(error.localizedDescription)")
+            }
+        }
+    }
+
+    func restoreSlot(_ slot: Int) {
+        guard let cam = client, connected, let backup = backups[slot], !busy else { return }
+        let label = selectedSlotLabel
+        busy = true
+        busyText = "正在还原 \(label)…"
+
+        Task {
+            do {
+                let summary = try await Task.detached(priority: .userInitiated) { () -> String in
+                    try cam.setPictCtrl(slot: slot, payload: backup)
+                    let readBack = try cam.getPictCtrl(slot: slot)
+                    return Payload.diff(backup, readBack).summary
+                }.value
+                self.lastWriteResult = summary
+                self.busy = false
+                self.busyText = ""
+                self.log("还原 \(label)：\(summary)")
+                self.loadSlotPreview(slot)
+            } catch {
+                self.busy = false
+                self.busyText = ""
+                self.message = error.localizedDescription
+                self.log("还原失败：\(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - 照片拟合
@@ -321,14 +550,7 @@ final class AppModel: ObservableObject {
             return
         }
         do {
-            var payload = Payload.withName(item.payload, draftName.isEmpty ? item.name : draftName)
-            if paramsEnabled {
-                payload = Payload.setParams(payload, [
-                    .sharp: sharp,
-                    .clarity: clarity,
-                    .saturation: saturation,
-                ])
-            }
+            guard let payload = currentPayload() else { return }
 
             let raw = try Data(contentsOf: item.url)
             let originalMeta = try Recipe.metaJSON(raw)

@@ -1,10 +1,9 @@
 import SwiftUI
 
 /// 主界面。卡片顺序对齐安卓端 `WriterScreen.kt`：
-/// 照片拟合 → 预设库 → 照片对比 → 配方 → 导出 → 日志。
+/// 设备 → 槽位 → 照片拟合 → 预设库 → 照片对比 → 配方 → 日志。
 ///
-/// 与安卓的差异只有一处：安卓最上面是「设备卡 + 槽位九宫格」，
-/// iOS 没有 USB/PTP 访问能力，那两张卡不存在；写入出口换成「导出 .z30」。
+/// 差异只在连接方式：安卓走 USB，iOS 走相机 Wi-Fi。写入能力两端一致。
 struct WriterScreen: View {
     @EnvironmentObject private var model: AppModel
     @State private var showLibrary = false
@@ -12,6 +11,8 @@ struct WriterScreen: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 14) {
+                DeviceCard()
+                SlotCard()
                 PhotoFitCard()
                 BuiltinLibraryCard { showLibrary = true }
                 PhotoCompareCard()
@@ -63,13 +64,26 @@ struct WriterScreen: View {
 struct ExportBar: View {
     @EnvironmentObject private var model: AppModel
 
+    private var barSubtitle: String {
+        if model.connected {
+            if let slot = model.selectedSlot, !model.selectedSlotLabel.isEmpty {
+                return "已连接相机 · 可在槽位卡写入 \(model.selectedSlotLabel)"
+            }
+            return "已连接相机 · 在槽位卡里选一个槽位"
+        }
+        if model.selectedRecipe == nil {
+            return "先在预设库或配方里选一条"
+        }
+        return "连上相机 Wi-Fi 可直接写入，或导出 .z30"
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.selectedRecipe?.name ?? "未选配方")
                     .font(.subheadline)
                     .lineLimit(1)
-                Text(model.selectedRecipe == nil ? "先在预设库或配方里选一条" : "导出 .z30，交给安卓或电脑写入机身")
+                Text(barSubtitle)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -106,7 +120,7 @@ struct ExportSheet: View {
                     .foregroundStyle(.tint)
                 Text(result.name)
                     .font(.headline)
-                Text("把这个文件传到安卓机或电脑，选它写入 C1–C9。")
+                Text("也可以在设备卡连上相机 Wi-Fi，直接写入 C1–C9；这个文件适合备份或传给别的设备。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
