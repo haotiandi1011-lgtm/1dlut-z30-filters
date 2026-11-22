@@ -84,7 +84,10 @@ if ($probe) {
     Write-Host "     camera port did not answer. Capture will still run." -ForegroundColor Yellow
 }
 
-Write-Host "2/5  Set packet filter (TCP 15740) ..."
+Write-Host "2/5  Reset packet filter (TCP 15740) ..."
+# Clear any capture session left behind by an earlier failed run, otherwise the
+# new start silently does nothing.
+pktmon stop | Out-Null
 pktmon filter remove | Out-Null
 pktmon filter add PTPIP -p 15740 -t TCP
 
@@ -95,29 +98,39 @@ if (Test-Path "$out\wtu.etl") { Remove-Item "$out\wtu.etl" -Force }
 if (Test-Path "$out\wtu.pcap") { Remove-Item "$out\wtu.pcap" -Force }
 # NOTE: the flag is --file-name (not --file).
 pktmon start --capture --pkt-size 0 --file-name "$out\wtu.etl"
-Start-Sleep -Seconds 2
-if (-not (Test-Path "$out\wtu.etl")) {
-    Write-Host "ERROR: capture did not start (no etl file)." -ForegroundColor Red
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: pktmon could not start (exit code $LASTEXITCODE)." -ForegroundColor Red
     Read-Host "Press Enter to close"
     exit 2
 }
-Write-Host "     capture is running, target file $out\wtu.etl"
+Write-Host "     pktmon started, target file $out\wtu.etl"
 
-# Self-test: make one bare TCP connection to the camera port while capturing.
-# If this shows up, we know the capture pipeline works, so an empty result later
-# means "WTU never connected" rather than "pktmon is broken".
+# pktmon creates the etl file lazily, on the first captured packet. If nothing is
+# flowing, the file simply does not exist yet - so do not treat that as failure.
+# This self-test connect produces the first packets and proves the pipeline works.
 try {
     $tcp = New-Object System.Net.Sockets.TcpClient
     $iar = $tcp.BeginConnect($camIp, $camPort, $null, $null)
     if ($iar.AsyncWaitHandle.WaitOne(3000)) {
         $tcp.EndConnect($iar)
-        Write-Host "     self-test connect: OK (SYN should be in the capture)" -ForegroundColor Green
+        Write-Host "     self-test connect: OK" -ForegroundColor Green
     } else {
         Write-Host "     self-test connect: timeout (camera not reachable)" -ForegroundColor Yellow
     }
     $tcp.Close()
 } catch {
     Write-Host "     self-test connect failed: $($_.Exception.Message)" -ForegroundColor Yellow
+}
+
+$waited = 0
+while (-not (Test-Path "$out\wtu.etl") -and $waited -lt 10) {
+    Start-Sleep -Seconds 1
+    $waited++
+}
+if (Test-Path "$out\wtu.etl") {
+    Write-Host "     capture file is being written (after ${waited}s)"
+} else {
+    Write-Host "     WARNING: no etl file yet; continuing anyway." -ForegroundColor Yellow
 }
 # Let the self-test socket leave ESTABLISHED, otherwise the detector below could
 # mistake our own probe for WTU's session.
