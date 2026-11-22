@@ -119,6 +119,9 @@ try {
 } catch {
     Write-Host "     self-test connect failed: $($_.Exception.Message)" -ForegroundColor Yellow
 }
+# Let the self-test socket leave ESTABLISHED, otherwise the detector below could
+# mistake our own probe for WTU's session.
+Start-Sleep -Seconds 2
 
 Write-Host "4/5  Launching WTU ..."
 if (Test-Path $wtu) {
@@ -129,16 +132,40 @@ if (Test-Path $wtu) {
 
 Write-Host ""
 Write-Host "=== NOW DO THIS IN THE WTU WINDOW ===" -ForegroundColor Cyan
-Write-Host "  page 2/16  Hardware type: choose [Camera built-in Wi-Fi]" -ForegroundColor Cyan
-Write-Host "             (NOT wired LAN and NOT wireless LAN)" -ForegroundColor Cyan
-Write-Host "  page 3/16  Operation: choose [Add / edit profiles]" -ForegroundColor Cyan
-Write-Host "             NOT [Select destination folder] - that one only sets a folder" -ForegroundColor Cyan
-Write-Host "  then follow the wizard until WTU actually connects to the camera" -ForegroundColor Cyan
+Write-Host "  page 2/16  Hardware type: [Camera built-in Wi-Fi]" -ForegroundColor Cyan
+Write-Host "  page 3/16  Operation: only [Select destination folder] can be clicked." -ForegroundColor Cyan
+Write-Host "             That is normal for built-in Wi-Fi; the other two are for" -ForegroundColor Cyan
+Write-Host "             WT-4/WT-5 add-on units. Just use the folder one." -ForegroundColor Cyan
+Write-Host "  then click Next through to the last page." -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Capture keeps running until you press Enter. No time limit." -ForegroundColor Green
+Write-Host "Waiting for a NEW TCP session to the camera (max 240s) ..." -ForegroundColor Green
+Write-Host "You do not need to press anything here; this stops by itself." -ForegroundColor Green
 Write-Host ""
 
-Read-Host "Press Enter ONLY AFTER the WTU wizard has finished connecting"
+$newConn = $false
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
+$lastPrint = -1
+while ($sw.Elapsed.TotalSeconds -lt 240) {
+    $c = Get-NetTCPConnection -RemotePort $camPort -State Established -ErrorAction SilentlyContinue
+    if ($c) { $newConn = $true; break }
+    Start-Sleep -Milliseconds 400
+    $sec = [int]$sw.Elapsed.TotalSeconds
+    if ($sec -ne $lastPrint -and ($sec % 10) -eq 0) {
+        $lastPrint = $sec
+        Write-Host "     ${sec}s ..."
+    }
+}
+
+if ($newConn) {
+    Write-Host ""
+    Write-Host "     NEW session to the camera detected after $([int]$sw.Elapsed.TotalSeconds)s" -ForegroundColor Green
+    Write-Host "     capturing 20 more seconds so the handshake is safely inside the file ..."
+    Start-Sleep -Seconds 20
+} else {
+    Write-Host ""
+    Write-Host "     no new session appeared within 240s." -ForegroundColor Yellow
+    Write-Host "     The wizard probably never got to the connect step." -ForegroundColor Yellow
+}
 
 Write-Host "5/5  Stop capture and convert ..."
 pktmon stop | Out-Null
