@@ -1,4 +1,4 @@
-# Capture one PTP/IP handshake between WTU and the camera, to extract the paired GUID.
+# Capture the PTP/IP handshake between WTU and the camera, to extract the paired GUID.
 # Must run as Administrator; the PC should already be connected to the camera Wi-Fi.
 #
 # Usage (Administrator PowerShell):
@@ -7,8 +7,9 @@
 # NOTE 1: this file is intentionally 100% ASCII. Windows PowerShell 5.1 reads a
 # BOM-less .ps1 as ANSI/GBK, so Chinese text inside would be mis-decoded and
 # break the parser.
-# NOTE 2: there is no countdown timer. You press Enter when the WTU wizard is
-# done, so a slow click-through cannot waste the capture window.
+# NOTE 2: the filter captures ALL traffic to/from the camera IP, not just 15740.
+# That way, if WTU talks on another port (discovery, transfer channel), we still
+# see it instead of staring at an empty capture.
 
 $ErrorActionPreference = "Continue"
 $out = "D:\Z30Tools\capture"
@@ -84,12 +85,12 @@ if ($probe) {
     Write-Host "     camera port did not answer. Capture will still run." -ForegroundColor Yellow
 }
 
-Write-Host "2/5  Reset packet filter (TCP 15740) ..."
+Write-Host "2/5  Reset packet filter (all traffic to/from $camIp) ..."
 # Clear any capture session left behind by an earlier failed run, otherwise the
 # new start silently does nothing.
 pktmon stop | Out-Null
 pktmon filter remove | Out-Null
-pktmon filter add PTPIP -p 15740 -t TCP
+pktmon filter add CAMERA -i $camIp
 
 Write-Host "3/5  Start capture ..."
 # Delete both the etl and any stale pcap, otherwise a failed run would leave the
@@ -108,12 +109,14 @@ Write-Host "     pktmon started, target file $out\wtu.etl"
 # pktmon creates the etl file lazily, on the first captured packet. If nothing is
 # flowing, the file simply does not exist yet - so do not treat that as failure.
 # This self-test connect produces the first packets and proves the pipeline works.
+$selfLocalPort = 0
 try {
     $tcp = New-Object System.Net.Sockets.TcpClient
     $iar = $tcp.BeginConnect($camIp, $camPort, $null, $null)
     if ($iar.AsyncWaitHandle.WaitOne(3000)) {
         $tcp.EndConnect($iar)
-        Write-Host "     self-test connect: OK" -ForegroundColor Green
+        try { $selfLocalPort = $tcp.Client.LocalEndPoint.Port } catch { }
+        Write-Host "     self-test connect: OK (local port $selfLocalPort)" -ForegroundColor Green
     } else {
         Write-Host "     self-test connect: timeout (camera not reachable)" -ForegroundColor Yellow
     }
@@ -132,8 +135,6 @@ if (Test-Path "$out\wtu.etl") {
 } else {
     Write-Host "     WARNING: no etl file yet; continuing anyway." -ForegroundColor Yellow
 }
-# Let the self-test socket leave ESTABLISHED, otherwise the detector below could
-# mistake our own probe for WTU's session.
 Start-Sleep -Seconds 2
 
 Write-Host "4/5  Launching WTU ..."
@@ -146,24 +147,34 @@ if (Test-Path $wtu) {
 Write-Host ""
 Write-Host "=== NOW DO THIS IN THE WTU WINDOW ===" -ForegroundColor Cyan
 Write-Host "  page 2/16  Hardware type: [Camera built-in Wi-Fi]" -ForegroundColor Cyan
-Write-Host "  page 3/16  Operation: only [Select destination folder] can be clicked." -ForegroundColor Cyan
-Write-Host "             That is normal for built-in Wi-Fi; the other two are for" -ForegroundColor Cyan
-Write-Host "             WT-4/WT-5 add-on units. Just use the folder one." -ForegroundColor Cyan
-Write-Host "  then click Next through to the last page." -ForegroundColor Cyan
+Write-Host "  page 3/16  Operation: [Select destination folder] is the only one that" -ForegroundColor Cyan
+Write-Host "             can be clicked for built-in Wi-Fi. Use it, then Next to the end." -ForegroundColor Cyan
+Write-Host "  If WTU shows an error, take a screenshot of that page - it matters." -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Waiting for a NEW TCP session to the camera (max 240s) ..." -ForegroundColor Green
-Write-Host "You do not need to press anything here; this stops by itself." -ForegroundColor Green
+Write-Host "Watching every TCP connection to $camIp for 300s ..." -ForegroundColor Green
+Write-Host "Any new connection on ANY port is reported below." -ForegroundColor Green
 Write-Host ""
 
 $newConn = $false
+$seen = @{}
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 $lastPrint = -1
-while ($sw.Elapsed.TotalSeconds -lt 240) {
-    $c = Get-NetTCPConnection -RemotePort $camPort -State Established -ErrorAction SilentlyContinue
-    if ($c) { $newConn = $true; break }
+while ($sw.Elapsed.TotalSeconds -lt 300) {
+    $items = Get-NetTCPConnection -RemoteAddress $camIp -State Established -ErrorAction SilentlyContinue
+    foreach ($x in $items) {
+        $k = "$($x.LocalPort)->$($x.RemotePort)"
+        if (-not $seen.ContainsKey($k)) {
+            $seen[$k] = $true
+            if ($x.LocalPort -ne $selfLocalPort) {
+                Write-Host "     connection: local $($x.LocalPort) -> camera $($x.RemotePort) at $([int]$sw.Elapsed.TotalSeconds)s" -ForegroundColor Green
+            }
+        }
+        if ($x.RemotePort -eq $camPort -and $x.LocalPort -ne $selfLocalPort) { $newConn = $true }
+    }
+    if ($newConn) { break }
     Start-Sleep -Milliseconds 400
     $sec = [int]$sw.Elapsed.TotalSeconds
-    if ($sec -ne $lastPrint -and ($sec % 10) -eq 0) {
+    if ($sec -ne $lastPrint -and ($sec % 20) -eq 0) {
         $lastPrint = $sec
         Write-Host "     ${sec}s ..."
     }
@@ -171,13 +182,17 @@ while ($sw.Elapsed.TotalSeconds -lt 240) {
 
 if ($newConn) {
     Write-Host ""
-    Write-Host "     NEW session to the camera detected after $([int]$sw.Elapsed.TotalSeconds)s" -ForegroundColor Green
-    Write-Host "     capturing 20 more seconds so the handshake is safely inside the file ..."
-    Start-Sleep -Seconds 20
+    Write-Host "     NEW session on port $camPort detected after $([int]$sw.Elapsed.TotalSeconds)s" -ForegroundColor Green
+    Write-Host "     capturing 25 more seconds so the handshake is safely inside the file ..."
+    Start-Sleep -Seconds 25
 } else {
     Write-Host ""
-    Write-Host "     no new session appeared within 240s." -ForegroundColor Yellow
-    Write-Host "     The wizard probably never got to the connect step." -ForegroundColor Yellow
+    Write-Host "     no new session on port $camPort within 300s." -ForegroundColor Yellow
+    if ($seen.Count -gt 0) {
+        Write-Host "     but these connections did happen: $($seen.Keys -join ', ')" -ForegroundColor Yellow
+    } else {
+        Write-Host "     and no TCP connection to the camera happened at all." -ForegroundColor Yellow
+    }
 }
 
 Write-Host "5/5  Stop capture and convert ..."
@@ -194,8 +209,7 @@ if (Test-Path "$out\wtu.etl") {
         Write-Host ""
         Write-Host "DONE: $out\wtu.pcap  ($size bytes)" -ForegroundColor Green
         if ($size -lt 400) {
-            Write-Host "NOTE: the file is almost empty, so no 15740 traffic was captured." -ForegroundColor Yellow
-            Write-Host "      Most likely WTU never connected. Try again and finish the wizard." -ForegroundColor Yellow
+            Write-Host "NOTE: the file is almost empty, so nothing was captured." -ForegroundColor Yellow
         }
         Write-Host "Now switch Wi-Fi back to your normal network and tell me it is done."
     } else {
