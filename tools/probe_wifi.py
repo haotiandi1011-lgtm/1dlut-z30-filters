@@ -37,6 +37,7 @@ import argparse
 import socket
 import struct
 import sys
+import time
 
 HOST = "192.168.1.1"
 PORT = 15740
@@ -79,16 +80,27 @@ RC_NAMES = {
     0x2005: "OperationNotSupported",
     0x2006: "ParameterNotSupported",
     0x2007: "IncompleteTransfer",
-    0x2009: "InvalidStorageID",
-    0x2019: "DevicePropNotSupported",
-    0x201A: "InvalidObjectHandle",
-    0x201B: "DeviceBusy",
-    0x201C: "StorageFull",
-    0x201D: "ObjectAlreadyExists",
-    0x201E: "PTPAccessDenied",
-    0x201F: "PTPAccessDenied2",
-    0xA001: "SessionAlreadyOpen",
-    0xA002: "TransactionCancelled",
+    0x2008: "InvalidStorageID",
+    0x2009: "InvalidObjectHandle",
+    0x200A: "DevicePropNotSupported",
+    0x200B: "InvalidObjectFormatCode",
+    0x200C: "StoreFull",
+    0x200D: "ObjectWriteProtected",
+    0x200E: "StoreReadOnly",
+    0x200F: "AccessDenied",
+    0x2012: "PartialDeletion",
+    0x2013: "StoreNotAvailable",
+    0x2015: "NoValidObjectInfo",
+    0x2016: "InvalidCodeFormat",
+    0x2017: "UnknownVendorCode",
+    0x2018: "CaptureAlreadyTerminated",
+    0x2019: "DeviceBusy",
+    0x201A: "InvalidParentObject",
+    0x201B: "InvalidDevicePropFormat",
+    0x201C: "InvalidDevicePropValue",
+    0x201D: "InvalidParameter",
+    0x201E: "SessionAlreadyOpen",
+    0x201F: "TransactionCancelled",
 }
 
 
@@ -244,7 +256,7 @@ class PtpIp:
 
     def open_session(self) -> None:
         rcode, _ = self.transact(OP_OPEN_SESSION, (1,))
-        if rcode == 0xA001:  # SessionAlreadyOpen
+        if rcode == 0x201E:  # SessionAlreadyOpen
             self.log("  会话已开，先关再开")
             self.transact(OP_CLOSE_SESSION)
             rcode, _ = self.transact(OP_OPEN_SESSION, (1,))
@@ -257,10 +269,47 @@ class PtpIp:
             raise RuntimeError(f"读槽位 0x{slot:02X} 失败：{rc_text(rcode)}")
         return data
 
-    def set_pict_ctrl(self, slot: int, payload: bytes) -> None:
-        rcode, _ = self.transact(OP_SET_PICT_CTRL, (slot, 0), data_out=payload)
-        if rcode != RC_OK:
-            raise RuntimeError(f"写槽位 0x{slot:02X} 失败：{rc_text(rcode)}")
+    def send_9010_no_wait(self) -> None:
+        """发 0x9010(0x2001) 但不等待回应。
+
+        抓包里 WTU 发出这个包之后也从未收到过回应，说明它本来就不保证有应答
+        （或者是异步的）。所以这里只发不等，避免把整个流程卡在 socket 超时上。
+        """
+        txn = self.txn
+        self.txn += 1
+        body = struct.pack("<IIHI", PKT_OP_REQ, 1, OP_9010, txn) + struct.pack("<I", 0x2001)
+        self._send_packet(body)
+        self.log(f"  → 0x9010(0x2001) 已发送，不等回应（txn={txn}）")
+
+    def set_pict_ctrl(self, slot: int, payload: bytes, framing: str = "end") -> None:
+        """写槽位。framing="end" 把数据放进 EndData（相机自己就是这么发的）；
+        framing="data" 用 Data 包携带数据、EndData 空收尾（ISO 15740 的常见写法）。
+        """
+        txn = self.txn
+        self.txn += 1
+        body = struct.pack("<IIHI", PKT_OP_REQ, 2, OP_SET_PICT_CTRL, txn)
+        body += struct.pack("<I", slot) + struct.pack("<I", 0)
+        self._send_packet(body)
+
+        self._send_packet(struct.pack("<IIQ", PKT_START_DATA, txn, len(payload)))
+        if framing == "end":
+            self._send_packet(struct.pack("<II", PKT_END_DATA, txn) + payload)
+        else:
+            self._send_packet(struct.pack("<II", PKT_DATA, txn) + payload)
+            self._send_packet(struct.pack("<II", PKT_END_DATA, txn))
+
+        while True:
+            ptype, pkt = self._recv_packet()
+            if ptype == PKT_OP_RESP:
+                rcode = struct.unpack_from("<H", pkt, 4)[0]
+                rtxn = struct.unpack_from("<I", pkt, 6)[0]
+                if rtxn != txn:
+                    continue
+                if rcode != RC_OK:
+                    raise RuntimeError(f"写槽位 0x{slot:02X} 失败：{rc_text(rcode)}（分帧 {framing}）")
+                return
+            if ptype in (PKT_START_DATA, PKT_DATA, PKT_END_DATA, PKT_EVENT):
+                continue
 
     def close(self) -> None:
         try:
@@ -391,45 +440,73 @@ def main() -> int:
             mark = "✔" if code in info["ops"] else "✘"
             print(f"  0x{code:04X} {label}：{mark}")
 
-        # WTU 在 OpenSession 之后立刻发 0x9010(0x2001)。漏掉它时，
-        # 读槽位只有 36 字节、写入返回 PTPAccessDenied2，所以这一步是关键。
-        if args.no_9010:
-            print("\n-- 跳过 0x9010（对比模式）--")
-        else:
-            rcode, _ = cam.transact(OP_9010, (0x2001,))
-            print(f"\n-- 0x9010(0x2001)：{rc_text(rcode)} --")
-
-        print(f"\n-- 读取槽位 0x{slot:02X} --")
-        original = cam.get_pict_ctrl(slot)
-        describe_payload(original)
-        if len(original) != 614:
+        # 先不带 0x9010 读一次：这一版一定能拿到回应（36 字节），把它打出来
+        # 才能判断这 36 字节到底是什么东西。
+        print(f"\n-- 读取槽位 0x{slot:02X}（未发 0x9010）--")
+        before = cam.get_pict_ctrl(slot)
+        describe_payload(before)
+        if len(before) != 614:
             print("  原始字节：")
-            print(hexdump(original))
+            print(hexdump(before))
+
+        best_slot, best_data = (slot, before) if len(before) == 614 else (None, None)
 
         if args.scan:
-            print("\n-- 扫描槽位 --")
+            print("\n-- 扫描槽位（未发 0x9010）--")
             for s in list(range(0, 9)) + list(range(0xC9, 0xD2)):
                 if s == slot:
                     continue
                 try:
                     d = cam.get_pict_ctrl(s)
-                    flag = " ← 614" if len(d) == 614 else ""
+                    flag = ""
+                    if len(d) == 614:
+                        flag = " ← 614 字节"
+                        if best_slot is None:
+                            best_slot, best_data = s, d
                     print(f"  0x{s:02X}: {len(d):>3} 字节{flag}")
                 except Exception as exc:  # noqa: BLE001
                     print(f"  0x{s:02X}: 失败 {type(exc).__name__}: {exc}")
 
+        if args.no_9010:
+            print("\n-- 跳过 0x9010（对比模式）--")
+        else:
+            print("\n-- 发送 0x9010(0x2001)，然后重新读取 --")
+            cam.send_9010_no_wait()
+            time.sleep(1.5)
+            try:
+                after = cam.get_pict_ctrl(slot)
+                print(f"  重新读取：{len(after)} 字节")
+                if len(after) == 614:
+                    describe_payload(after)
+                    best_slot, best_data = slot, after
+                elif after != before:
+                    print("  内容有变化，原始字节：")
+                    print(hexdump(after))
+                else:
+                    print("  与发送 0x9010 之前完全一致，说明这个操作没有改变读取结果")
+            except Exception as exc:  # noqa: BLE001
+                print(f"  重新读取失败：{type(exc).__name__}: {exc}")
+
         if args.roundtrip:
-            if len(original) != 614:
-                print(f"\n[跳过写测试] 读到的不是 614 字节，不确定是载荷，不敢写回")
+            if best_slot is None:
+                print("\n[跳过写测试] 没有任何槽位返回 614 字节，不确定载荷格式，不写")
             else:
-                print("\n-- 原样写回（内容不变，只为验证写通道）--")
-                cam.set_pict_ctrl(slot, original)
-                print("  写入返回 OK")
-                again = cam.get_pict_ctrl(slot)
-                same = again == original
-                print(f"  回读比对：{'逐字节一致 ✔' if same else '不一致 ✘'}")
-                if not same:
-                    print(f"    原 {len(original)} 字节，回读 {len(again)} 字节")
+                print(f"\n-- 原样写回槽位 0x{best_slot:02X}（内容不变，只为验证写通道）--")
+                wrote = False
+                for framing in ("end", "data"):
+                    try:
+                        cam.set_pict_ctrl(best_slot, best_data, framing)
+                        print(f"  写入成功（分帧方式：{framing}）")
+                        wrote = True
+                        break
+                    except Exception as exc:  # noqa: BLE001
+                        print(f"  分帧 {framing} 失败：{exc}")
+                if wrote:
+                    again = cam.get_pict_ctrl(best_slot)
+                    same = again == best_data
+                    print(f"  回读比对：{'逐字节一致 ✔' if same else '不一致 ✘'}")
+                    if not same:
+                        print(f"    原 {len(best_data)} 字节，回读 {len(again)} 字节")
 
         print("\n结论：Wi-Fi 通道可用。")
         return 0
