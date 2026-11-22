@@ -52,6 +52,20 @@ INIT_BODY_HEX = (
     "00000100"                          # 协议版本 1.0
 )
 
+def build_init(host_id: bytes, name: str, conn: int) -> bytes:
+    """按实测格式拼 Init Command Request 包体。
+
+    格式：类型4(=1) + 连接号4 + 主机ID12 + UTF-16名 + NUL + 版本4
+    注意主机 ID 是 12 字节，不是标准 PTP/IP 的 16 字节 GUID。
+    """
+    if len(host_id) != 12:
+        raise ValueError(f"主机 ID 必须是 12 字节，实际 {len(host_id)}")
+    body = struct.pack("<II", 1, conn) + host_id
+    body += name.encode("utf-16-le") + b"\x00\x00"
+    body += struct.pack("<I", 0x00010000)
+    return body
+
+
 PKT_INIT_REQ = 1
 PKT_INIT_ACK = 2
 PKT_INIT_EVENT_REQ = 3
@@ -109,11 +123,12 @@ def rc_text(code: int) -> str:
 
 
 class PtpIp:
-    def __init__(self, host: str = HOST, port: int = PORT, timeout: float = 8.0, verbose: bool = True):
+    def __init__(self, host: str = HOST, port: int = PORT, timeout: float = 8.0, verbose: bool = True, init_body: bytes | None = None):
         self.host = host
         self.port = port
         self.timeout = timeout
         self.verbose = verbose
+        self.init_body = init_body
         self.sock: socket.socket | None = None
         self.event_sock: socket.socket | None = None
         self.conn = 1
@@ -156,7 +171,7 @@ class PtpIp:
         self.log(f"TCP 已连接 {self.host}:{self.port}")
 
     def init(self) -> dict:
-        body = bytes.fromhex(INIT_BODY_HEX)
+        body = self.init_body or bytes.fromhex(INIT_BODY_HEX)
         if len(body) != 56:
             raise AssertionError(f"内置 Init 包应为 56 字节，实际 {len(body)}")
         self._send_packet(body)
@@ -411,11 +426,28 @@ def main() -> int:
     ap.add_argument("--start", default="0xC0", help="--list 的起始槽位")
     ap.add_argument("--end", default="0xE0", help="--list 的结束槽位")
     ap.add_argument("--try-9010", action="store_true", help="额外测试 0x9010（会污染连接，默认不做）")
+    ap.add_argument("--id", default="captured", help="captured / random / 24 位十六进制")
+    ap.add_argument("--name", default="LAPTOP-2QHRJOR1", help="握手时上报的主机名")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
     slot = int(args.slot, 16) if str(args.slot).lower().startswith("0x") else int(args.slot)
-    cam = PtpIp(args.host, args.port, verbose=not args.quiet)
+
+    if args.id == "captured":
+        init_body = bytes.fromhex(INIT_BODY_HEX)
+        id_note = "captured（WTU 配对时用的身份）"
+    elif args.id == "random":
+        import os as _os
+        hid = _os.urandom(12)
+        init_body = build_init(hid, args.name, 0x12345678)
+        id_note = f"random {hid.hex()}"
+    else:
+        hid = bytes.fromhex(args.id)
+        init_body = build_init(hid, args.name, 0x12345678)
+        id_note = f"指定 {hid.hex()}"
+
+    print(f"主机 ID：{id_note}")
+    cam = PtpIp(args.host, args.port, verbose=not args.quiet, init_body=init_body)
 
     print("=" * 64)
     print(f"Z30 Wi-Fi 探针 · 槽位 0x{slot:02X} · 目标 {args.host}:{args.port}")
