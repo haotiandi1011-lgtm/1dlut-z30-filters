@@ -159,20 +159,20 @@ final class PtpIpClient: @unchecked Sendable {
 
     @discardableResult
     func handshake() throws -> String {
-        let body = Self.makeInitBody(hostID: hostID, hostName: hostName, conn: UInt32.random(in: 1...0xFFFF_FFFF))
-        try sendPacket(body)
-        let (type, body) = try receivePacket()
+        let request = Self.makeInitBody(hostID: hostID, hostName: hostName, conn: UInt32.random(in: 1...0xFFFF_FFFF))
+        try sendPacket(request)
+        let (type, ack) = try receivePacket()
 
         if type == 5 {
             throw PtpIpError.handshake("相机拒绝了这台主机（Init_Fail）")
         }
-        guard type == 2, body.count >= 24 else {
+        guard type == 2, ack.count >= 24 else {
             throw PtpIpError.handshake("期望 Init_Ack，收到类型 \(type)")
         }
 
-        connNumber = Self.u32(body, 4)
-        cameraID = Self.hex(body.subdata(in: 8..<24))
-        cameraName = Self.utf16String(body, from: 24)
+        connNumber = Self.u32(ack, 4)
+        cameraID = Self.hex(ack.subdata(in: 8..<24))
+        cameraName = Self.utf16String(ack, from: 24)
         return cameraName
     }
 
