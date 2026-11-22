@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Z30 影调 · iPhone 版测试手册</title>
+<style>
+  @page { size: A4; margin: 17mm 15mm 16mm 15mm; }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.72;
+    color: #1c1c1e;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .cover {
+    height: 245mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    page-break-after: always;
+  }
+  .cover .kicker {
+    font-size: 10pt;
+    letter-spacing: 2px;
+    color: #8a8a8e;
+    margin-bottom: 10mm;
+  }
+  .cover h1 {
+    font-size: 30pt;
+    line-height: 1.3;
+    margin: 0 0 6mm 0;
+    letter-spacing: 1px;
+  }
+  .cover .sub {
+    font-size: 13pt;
+    color: #48484a;
+    margin-bottom: 16mm;
+  }
+  .cover .box {
+    border-left: 4px solid #0a84ff;
+    padding: 5mm 6mm;
+    background: #f5f7fa;
+    font-size: 10.5pt;
+    color: #3a3a3c;
+    line-height: 1.85;
+  }
+  .cover .meta {
+    margin-top: 18mm;
+    font-size: 9.5pt;
+    color: #8a8a8e;
+  }
+
+  h2 {
+    font-size: 15pt;
+    margin: 9mm 0 3mm 0;
+    padding-bottom: 2mm;
+    border-bottom: 2px solid #0a84ff;
+    page-break-after: avoid;
+  }
+  h3 {
+    font-size: 12pt;
+    margin: 6mm 0 2mm 0;
+    page-break-after: avoid;
+  }
+  h4 {
+    font-size: 10.5pt;
+    margin: 4mm 0 1.5mm 0;
+    color: #0a84ff;
+    page-break-after: avoid;
+  }
+  p { margin: 2mm 0; }
+  ul, ol { margin: 2mm 0 2mm 6mm; padding-left: 4mm; }
+  li { margin: 1.2mm 0; }
+
+  .lead {
+    font-size: 11pt;
+    color: #3a3a3c;
+    background: #f5f7fa;
+    padding: 4mm 5mm;
+    border-radius: 3mm;
+    margin: 3mm 0;
+  }
+
+  .warn, .tip, .danger {
+    padding: 3.5mm 4.5mm;
+    margin: 3mm 0;
+    border-radius: 2.5mm;
+    font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  .warn  { background: #fff6e5; border-left: 3px solid #ff9f0a; }
+  .tip   { background: #eef6ff; border-left: 3px solid #0a84ff; }
+  .danger{ background: #ffecec; border-left: 3px solid #ff3b30; }
+  .warn b, .tip b, .danger b { display: block; margin-bottom: 1.5mm; }
+
+  .step {
+    display: flex;
+    gap: 3.5mm;
+    margin: 2.5mm 0;
+    page-break-inside: avoid;
+  }
+  .step .num {
+    flex: 0 0 7mm;
+    height: 7mm;
+    border-radius: 50%;
+    background: #0a84ff;
+    color: #fff;
+    font-size: 9.5pt;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.6mm;
+  }
+  .step .body { flex: 1; }
+  .step .body b { font-weight: 700; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 3mm 0;
+    font-size: 9.5pt;
+    page-break-inside: avoid;
+  }
+  th, td {
+    border: 0.3mm solid #d8d8dd;
+    padding: 2mm 2.5mm;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #f0f2f5; font-weight: 700; }
+  td code, p code, li code {
+    font-family: "Cascadia Mono", Consolas, monospace;
+    background: #f0f2f5;
+    padding: 0.4mm 1.4mm;
+    border-radius: 1mm;
+    font-size: 9pt;
+  }
+
+  .check {
+    border: 0.4mm solid #d8d8dd;
+    border-radius: 3mm;
+    padding: 4mm 5mm;
+    margin: 4mm 0;
+    page-break-inside: avoid;
+  }
+  .check h4 { margin-top: 0; }
+  .check .expect {
+    margin-top: 2mm;
+    padding-top: 2mm;
+    border-top: 0.3mm dashed #d8d8dd;
+    font-size: 10pt;
+  }
+  .check .expect b { color: #30a14e; }
+
+  .fill {
+    border-bottom: 0.3mm solid #b0b0b8;
+    display: inline-block;
+    min-width: 42mm;
+  }
+
+  .footer-note {
+    margin-top: 10mm;
+    padding-top: 3mm;
+    border-top: 0.3mm solid #d8d8dd;
+    font-size: 8.5pt;
+    color: #8a8a8e;
+  }
+
+  .pagebreak { page-break-before: always; }
+  .nobreak { page-break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<!-- ============ 封面 ============ -->
+<div class="cover">
+  <div class="kicker">测试手册 · 请先读完第 2 节再动手</div>
+  <h1>Z30 影调<br>iPhone 版</h1>
+  <div class="sub">给帮忙测试的朋友：怎么装、怎么用、要测什么</div>
+
+  <div class="box">
+    <b>一句话说明这是干什么的</b><br>
+    它帮你在手机上做一条「明暗曲线」——可以从 121 套现成的里挑，也可以拿一张照片算出来——<br>
+    然后导出一个约 1 KB 的小文件，或连上相机 Wi-Fi 直接写进相机的 C1–C9 槽位。<br><br>
+    <b>默认只读：只有你点「写入」并确认之后，才会改动相机里的那一个槽位。</b><br>
+    <span>Wi-Fi 写入需要相机先和电脑配对过一次，详见第 11 节；导出这条路径不需要配对。</span>
+  </div>
+
+  <div class="meta">
+    版本 v0.3.0（测试版）· 仅用于受邀请的测试<br>
+    文档更新：2026 年 11 月
+  </div>
+</div>
+
+<!-- ============ 1 ============ -->
+<h2>1. 你需要准备什么</h2>
+
+<table>
+  <tr><th style="width:32%">东西</th><th>要求</th></tr>
+  <tr><td>iPhone</td><td>系统 <b>iOS 16 或更新</b>。查看方法：设置 → 通用 → 关于本机 → 看「软件版本」</td></tr>
+  <tr><td>Windows 电脑</td><td>Win10 / Win11 都行，能联网</td></tr>
+  <tr><td>数据线</td><td>能传数据的苹果线。<b>只能充电的线不行</b>（这类线插上电脑没反应）</td></tr>
+  <tr><td>Apple ID</td><td>就是你平时在 App Store 下载东西用的账号，<b>免费账号就行</b>，不用花钱</td></tr>
+  <tr><td>时间</td><td>第一次装大约 10 分钟，之后测试约 15 分钟</td></tr>
+</table>
+
+<div class="tip">
+  <b>先说清楚代价</b>
+  用免费 Apple ID 装的 App，苹果只允许用 <b>7 天</b>。到期后 App 打不开、图标变灰，<b>不是坏了</b>，
+  连电脑用同样的方法再点一次开始就行，不用卸载重装。这是苹果的规定，绕不过去。
+</div>
+
+<!-- ============ 2 ============ -->
+<h2>2. 怎么装到手机上</h2>
+
+<h3>2.1 先下载两个东西</h3>
+<div class="step"><div class="num">1</div><div class="body">
+  <b>安装包</b>：我发你的 <code>Z30Tone-unsigned-ipa</code>（文件名以 <code>.ipa</code> 结尾）。先存到电脑桌面，别放太深的文件夹。
+</div></div>
+<div class="step"><div class="num">2</div><div class="body">
+  <b>安装工具 Sideloadly</b>：浏览器打开 <code>sideloadly.io</code>，下载 Windows 版并安装。免费，不用注册。
+</div></div>
+
+<h3>2.2 把手机连上电脑</h3>
+<div class="step"><div class="num">3</div><div class="body">
+  用数据线把 iPhone 插到电脑。手机屏幕会弹「要信任此电脑吗」，点<b>信任</b>，然后输入你的锁屏密码。
+</div></div>
+<div class="step"><div class="num">4</div><div class="body">
+  打开 Sideloadly。左边应该能看到你的手机名字。<br>
+  <span style="color:#8a8a8e">如果显示「No device found」：换一根线、换一个 USB 口，或者把手机解锁后再看。</span>
+</div></div>
+
+<h3>2.3 装进去</h3>
+<div class="step"><div class="num">5</div><div class="body">
+  把 <code>.ipa</code> 文件<b>直接拖到 Sideloadly 窗口里</b>；或者点窗口里那个蓝色的 IPA 图标去选文件。
+</div></div>
+<div class="step"><div class="num">6</div><div class="body">
+  在 <b>Apple ID</b> 那一栏填你的苹果账号邮箱。
+</div></div>
+<div class="step"><div class="num">7</div><div class="body">
+  点右下角的 <b>Start</b>。会弹窗要密码，填你的 Apple ID 密码。
+</div></div>
+<div class="step"><div class="num">8</div><div class="body">
+  等进度条走完（大约 1–2 分钟）。手机上会出现「Z30 影调」的图标。
+</div></div>
+
+<div class="warn">
+  <b>如果开了「双重认证」（大部分人都开了）</b>
+  Sideloadly 会让你在<b>手机上输入收到的验证码</b>，按提示做就行。它不会保存你的密码。
+</div>
+
+<h3>2.4 第一次打开前，必须做这两件事</h3>
+
+<div class="danger">
+  <b>不做这两步，App 一定打不开</b>
+  这不是软件的问题，是苹果对「非 App Store 来源」的强制要求。
+</div>
+
+<h4>第一步：信任开发者</h4>
+<p>设置 → 通用 → <b>VPN 与设备管理</b> → 在「开发者 App」下面找到你的 Apple ID（邮箱）→ 点进去 → 点<b>信任</b>。</p>
+
+<h4>第二步：打开开发者模式（iOS 16 及以上）</h4>
+<p>设置 → 隐私与安全性 → 拉到最下面 → <b>开发者模式</b> → 打开 → 手机会要求重启 → 重启后解锁，会再问一次，点<b>打开</b>。</p>
+
+<div class="tip">
+  <b>找不到「开发者模式」？</b>
+  说明手机还没连过开发工具。先把手机连上电脑、打开 Sideloadly 一次，这个选项才会出现。
+</div>
+
+<h3>2.5 以后又打不开了怎么办</h3>
+<p>七成是 7 天到期了。把手机连电脑，打开 Sideloadly，重新拖一次 ipa、点 Start 即可，
+<b>不用先卸载</b>。卸载会把你存的配方一起删掉。</p>
+
+<!-- ============ 3 ============ -->
+<div class="pagebreak"></div>
+<h2>3. 打开后你会看到什么</h2>
+
+<p>整个 App 就是一页，从上往下滑，一共八块：</p>
+
+<table>
+  <tr><th style="width:30%">这一块</th><th>干什么的</th></tr>
+  <tr><td>相机连接</td><td>手机连上相机 Wi-Fi 后点「连接」。你的相机没做过配对，这一步会提示「相机拒绝了这台主机」，属预期（见第 11 节）</td></tr>
+  <tr><td>槽位</td><td>连上相机后显示 C1–C9，可以写入与还原；没连上时这里是空的</td></tr>
+  <tr><td>从照片生成曲线</td><td>选一张照片，算出一条符合它明暗分布的曲线</td></tr>
+  <tr><td>内置预设库</td><td>121 套现成的，挑一条直接用</td></tr>
+  <tr><td>照片对比</td><td>选一张照片，拖动中间的分割线，看套上曲线前后差多少</td></tr>
+  <tr><td>配方</td><td>你选中或生成的配方都在这儿，可以改名、删除、进回收站</td></tr>
+  <tr><td>底部那条</td><td>固定不动，显示当前选中的配方，「导出 .z30」按钮就在这儿</td></tr>
+  <tr><td>操作日志</td><td>最近做了什么，出问题的时候把这里截图给我很有用</td></tr>
+</table>
+
+<div class="lead">
+  <b>建议顺序</b>：先测预设库（第 4 节）→ 再用照片生成一条（第 5 节）→ 做对比（第 6 节）→ 导出（第 7 节）。
+  每一节都有一个「合格标准」，达标了就打勾，不达标就记下来告诉我。
+</div>
+
+<!-- ============ 4 ============ -->
+<h2>4. 测试一：预设库</h2>
+
+<div class="check">
+<h4>操作</h4>
+<div class="step"><div class="num">1</div><div class="body">找到「内置预设库」这块，点右上角的<b>「挑选」</b>。</div></div>
+<div class="step"><div class="num">2</div><div class="body">弹出一个列表。顶部有搜索框，输入「胶片」试试。</div></div>
+<div class="step"><div class="num">3</div><div class="body">随便点一条，比如「胶片 01 · 提亮」。</div></div>
+<div class="step"><div class="num">4</div><div class="body">再打开一次预设库，在某一条上<b>向左滑</b>，看有没有「隐藏」和「改名」。</div></div>
+<div class="step"><div class="num">5</div><div class="body">点左上角「看隐藏」，找到刚才隐藏的那条，点「恢复」。</div></div>
+
+<div class="expect">
+<b>合格标准</b>
+<ul>
+  <li>列表里一共 <b>121 条</b>，按「内置影调 / 胶片 / 电影 / 风光 / 暗调 / 街拍 / 日系 / 人像 / 黑白」分组</li>
+  <li>搜「胶片」能筛出那一组</li>
+  <li>点一条之后弹窗自动关掉，主界面上显示这条名字</li>
+  <li>「隐藏」之后它从全部列表消失，但「看隐藏」里能找到，点恢复又回来</li>
+  <li>改名之后显示的是新名字（提示里会说「只改显示名，id 不变」，这是对的）</li>
+</ul>
+</div>
+</div>
+
+<!-- ============ 5 ============ -->
+<h2>5. 测试二：用照片生成曲线</h2>
+
+<div class="check">
+<h4>操作</h4>
+<div class="step"><div class="num">1</div><div class="body">点「从照片生成曲线」里的<b>「选一张参考照片」</b>。</div></div>
+<div class="step"><div class="num">2</div><div class="body">
+  从相册选一张。建议选<b>明暗层次完整</b>的（有暗部、有中间调、有高光），
+  别选大白天拍纯白墙、或夜里大片纯黑的照片。
+</div></div>
+<div class="step"><div class="num">3</div><div class="body">等 1–3 秒。</div></div>
+<div class="step"><div class="num">4</div><div class="body">看下面的数字和曲线，然后点<b>「存为配方」</b>。</div></div>
+
+<div class="expect">
+<b>合格标准</b>
+<ul>
+  <li>出现「尺寸 / 耗时 / 贴合误差」三个数字</li>
+  <li>「贴合误差」两个数字通常都在 3 以内（越小越贴合）</li>
+  <li>出现一张曲线图：<b>橙色的虚线是目标，实线是结果</b>，两条应该贴得比较近</li>
+  <li>下面有一条带颜色的建议（绿色=很好，黄色=要留意，红色=不建议用）</li>
+  <li>点「存为配方」后，下面的「配方」里会多一条</li>
+</ul>
+</div>
+</div>
+
+<div class="tip">
+  <b>耗时多久算正常</b>
+  4 秒以内都能接受。如果超过 10 秒，告诉我你的手机型号，我来优化。
+</div>
+
+<div class="warn">
+  <b>如果提示「这张图解不开」</b>
+  相机的 RAW 文件（.NEF）是解不开的，这是苹果系统的限制。换成 JPG 或 HEIC 再试。
+</div>
+
+<!-- ============ 6 ============ -->
+<div class="pagebreak"></div>
+<h2>6. 测试三：拖动对比</h2>
+
+<div class="check">
+<h4>操作</h4>
+<div class="step"><div class="num">1</div><div class="body">在「照片对比」里点<b>「选一张照片来看效果」</b>，可以选和第 5 节同一张。</div></div>
+<div class="step"><div class="num">2</div><div class="body">照片上会出现一条白线和一个圆点。手指按住画面<b>左右拖动</b>。</div></div>
+<div class="step"><div class="num">3</div><div class="body">点「导出预览图」，选 <b>PNG</b>，看能不能存进「照片」。</div></div>
+
+<div class="expect">
+<b>合格标准</b>
+<ul>
+  <li>白线跟着手指走，<b>左边是原图，右边是套了曲线的</b></li>
+  <li>拖动过程不卡顿</li>
+  <li>换一条预设之后再回来，对比效果会跟着换（不用重新选照片）</li>
+  <li>导出的图能存进相册，打开看明暗确实变了</li>
+</ul>
+</div>
+</div>
+
+<div class="tip">
+  <b>这里最容易误解</b>
+  曲线只改<b>明暗</b>，不改颜色。所以如果你选的预设本身靠「色偏」才像某种风格，
+  对比图里只会看到明暗变化，颜色不会变——这不是 bug。
+</div>
+
+<!-- ============ 7 ============ -->
+<h2>7. 测试四：导出文件</h2>
+
+<div class="check">
+<h4>操作</h4>
+<div class="step"><div class="num">1</div><div class="body">确认底部那条显示的是你想导出的配方名。</div></div>
+<div class="step"><div class="num">2</div><div class="body">点<b>「导出 .z30」</b>。</div></div>
+<div class="step"><div class="num">3</div><div class="body">在弹出的面板里点<b>「保存 / 分享」</b> → 选<b>「存储到文件」</b> → 存到「我的 iPhone」里。</div></div>
+<div class="step"><div class="num">4</div><div class="body">打开手机自带的「文件」App，找到刚才存的文件。</div></div>
+
+<div class="expect">
+<b>合格标准</b>
+<ul>
+  <li>「文件」App 里能看到一个 <code>.z30</code> 结尾的文件</li>
+  <li>大小约 <b>1 KB</b>（如果显示 0 字节或几百 KB，都不对）</li>
+  <li>文件名就是你给的配方名</li>
+</ul>
+</div>
+</div>
+
+<div class="tip">
+  <b>这个文件干什么用</b>
+  把它发到安卓手机或电脑上，用那边的 App 打开，就能写进相机的 C1–C9。
+  这一版 iPhone 也能连相机 Wi-Fi 直接写，但需要先配对（第 11 节说明为什么你暂时用不了）。
+  导出这条路不需要配对，随时可用。
+</div>
+
+<!-- ============ 8 ============ -->
+<h2>8. 测试五：配方管理</h2>
+
+<p>在「配方」这块，每一行右边有三个点「⋯」，点它会出现菜单。</p>
+<ul>
+  <li><b>改名</b>：改完列表里显示新名字，曲线不变</li>
+  <li><b>移入回收站</b>：这一行从列表消失，但点右上角「回收站」还能找到</li>
+  <li><b>回收站里</b>：可以「恢复」，也可以「彻底删除」；右上角「清空」会全部删掉（会再问一次）</li>
+</ul>
+
+<div class="warn">
+  <b>彻底删除是真的删</b>
+  和电脑上的回收站一样，清空之后就找不回来了。测试时随便删，但别删你打算留着的东西。
+</div>
+
+<!-- ============ 9 ============ -->
+<div class="pagebreak"></div>
+<h2>9. 出问题怎么告诉我</h2>
+
+<p>不用写得像报告，但请尽量带上这五项，我能少问好几轮：</p>
+
+<table>
+  <tr><th style="width:26%">要写的</th><th>在哪看</th></tr>
+  <tr><td>手机型号</td><td>设置 → 通用 → 关于本机 → 型号名称</td></tr>
+  <tr><td>系统版本</td><td>同一页，「软件版本」，比如 iOS 17.5</td></tr>
+  <tr><td>第几步出的问题</td><td>对着本手册的编号说，比如「第 5 节第 3 步」</td></tr>
+  <tr><td>你点了什么、屏幕上出现什么</td><td>一句话就行，<b>有截图最好</b></td></tr>
+  <tr><td>能不能重现</td><td>再操作一次还会不会出现</td></tr>
+</table>
+
+<div class="tip">
+  <b>如果是闪退</b>
+  告诉我「闪退前最后看到的是哪个界面」，这比什么都管用。
+</div>
+
+<h3>反馈模板（可以直接复制）</h3>
+<div class="lead" style="font-size:9.5pt;line-height:1.9">
+手机：iPhone 14，iOS 17.5<br>
+问题：第 5 节第 3 步，选完照片一直转圈，等了 30 秒没反应<br>
+重现：再选一次还是这样，换了一张照片也一样<br>
+截图：已附
+</div>
+
+<!-- ============ 10 ============ -->
+<h2>10. 常见问题对照表</h2>
+
+<table>
+  <tr><th style="width:36%">你遇到的</th><th>原因和办法</th></tr>
+  <tr><td>双击 ipa 文件没反应</td><td>Windows 不认识 ipa。要用 Sideloadly 打开，不是双击</td></tr>
+  <tr><td>Sideloadly 里看不到手机</td><td>换数据线（要能传数据的）、换 USB 口、手机先解锁</td></tr>
+  <tr><td>提示密码错误</td><td>确认是 Apple ID 密码不是锁屏密码；开了双重认证要按手机上的验证码来</td></tr>
+  <tr><td>装完图标是灰的，点不开</td><td>没信任开发者。设置 → 通用 → VPN 与设备管理 → 信任</td></tr>
+  <tr><td>一点就闪退</td><td>没开开发者模式。设置 → 隐私与安全性 → 开发者模式</td></tr>
+  <tr><td>用了几天突然打不开</td><td>免费签名 7 天到期。连电脑重新装一次，别卸载</td></tr>
+  <tr><td>提示「这张图解不开」</td><td>RAW 文件不支持。换 JPG / PNG / HEIC</td></tr>
+  <tr><td>选照片后一直转圈</td><td>图太大或格式特殊。换一张普通 JPG 试试</td></tr>
+  <tr><td>对比图颜色没变</td><td>正常。曲线只改明暗，不改颜色</td></tr>
+  <tr><td>导出后找不到文件</td><td>「文件」App → 最近项目；或者存的时候选的是「照片」不是「文件」</td></tr>
+</table>
+
+<!-- ============ 11 ============ -->
+<h2>11. 这个版本不能做什么</h2>
+
+<p>写在这里，免得你以为是坏了：</p>
+
+<ul>
+  <li><b>Wi-Fi 直连写入需要先配对。</b>这一版已经支持通过相机 Wi-Fi 写 C1–C9，
+      但它用的主机身份来自一次电脑端配对，只对那台相机有效。
+      你的相机没做过这个配对，所以点「连接」会提示「相机拒绝了这台主机」——
+      这是预期结果，不是你操作错了。要写入请走「导出 .z30」，
+      或者等 0.3.1 把相机端的 PIN 配对做进来。</li>
+  <li><b>不能改色偏、饱和度、分色相。</b>相机里那条曲线只作用于明暗，三个颜色通道用的是同一张表，
+      数学上就造不出颜色差异。</li>
+  <li><b>不能打开 RAW。</b>只能读 JPG / PNG / HEIC。</li>
+  <li><b>不会给「还原度百分比」。</b>单张照片没有标准答案，那个数字是编的。
+      它只给「影调贴合误差」，单位是 8 位色阶，越小越贴合。</li>
+</ul>
+
+<!-- ============ 12 ============ -->
+<h2>12. 你的数据在哪</h2>
+
+<ul>
+  <li>配方存在<b>你自己手机里</b>，不上传任何服务器，App 不联网。</li>
+  <li><b>卸载 App 会连配方一起删掉。</b>要留着就先导出成 <code>.z30</code> 文件。</li>
+  <li><b>相机完全不会被改动</b>——这个版本里根本没有写相机的功能。</li>
+</ul>
+
+<div class="footer-note">
+  这份手册对应 Z30 影调 iPhone 版 v0.3.0（测试版）。<br>
+  如果你在别处看到「一键复刻某某滤镜」之类的说法，那不是这个项目——本项目只做影调近似，
+  并且会明说哪些做不到。
+</div>
+
+</body>
+</html>
