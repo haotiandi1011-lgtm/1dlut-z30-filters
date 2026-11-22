@@ -39,6 +39,43 @@ if (-not ($wlan -match "Z_30|Z 30|NIKON_Z")) {
     Write-Host "     Connect to the camera network first, or continue anyway." -ForegroundColor Yellow
 }
 
+Write-Host "1/5  Closing every WTU-related process ..."
+# The GUI is WirelessTransmitterUtility.exe, but the actual PTP/IP session is held
+# by NkPtpipStorage.exe (a helper). Killing only the GUI leaves an established TCP
+# session behind, and then the capture never contains an Init handshake.
+# So: kill whoever owns a connection to port 15740 first, then kill by name.
+$killed = @()
+# Only ESTABLISHED sessions. TIME_WAIT leftovers report Owner PID 0 or 4 (System),
+# and killing those would be catastrophic. Never kill ourselves either.
+$conns = Get-NetTCPConnection -RemotePort $camPort -State Established -ErrorAction SilentlyContinue
+foreach ($c in $conns) {
+    if ($c.OwningProcess -gt 4 -and $c.OwningProcess -ne $PID -and ($killed -notcontains $c.OwningProcess)) {
+        $killed += $c.OwningProcess
+        Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue
+    }
+}
+$names = @("WirelessTransmitterUtility", "NkPtpipStorage", "NkPtpEnum", "NkMsgSender", "WTMessage", "WTMessageMain")
+foreach ($n in $names) {
+    Get-Process -Name $n -ErrorAction SilentlyContinue | ForEach-Object {
+        if ($_.Id -ne $PID) {
+            if ($killed -notcontains $_.Id) { $killed += $_.Id }
+            Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+if ($killed.Count -gt 0) { Write-Host "     stopped PID(s): $($killed -join ', ')" } else { Write-Host "     nothing was running" }
+Start-Sleep -Seconds 3
+
+$left = Get-NetTCPConnection -RemotePort $camPort -State Established -ErrorAction SilentlyContinue
+if ($left) {
+    Write-Host "ERROR: a connection to port $camPort is still alive:" -ForegroundColor Red
+    $left | Select-Object LocalPort, RemoteAddress, RemotePort, State, OwningProcess | Format-Table -AutoSize
+    Write-Host "Close WTU manually, then run this script again." -ForegroundColor Red
+    Read-Host "Press Enter to close"
+    exit 3
+}
+Write-Host "     no session to the camera remains (good)"
+
 Write-Host "     probing ${camIp}:${camPort} ..."
 $probe = Test-NetConnection -ComputerName $camIp -Port $camPort -InformationLevel Quiet -WarningAction SilentlyContinue
 if ($probe) {
@@ -46,10 +83,6 @@ if ($probe) {
 } else {
     Write-Host "     camera port did not answer. Capture will still run." -ForegroundColor Yellow
 }
-
-Write-Host "1/5  Closing any running WTU (the next start must make a NEW connection) ..."
-Get-Process -Name "WirelessTransmitterUtility" -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Sleep -Seconds 2
 
 Write-Host "2/5  Set packet filter (TCP 15740) ..."
 pktmon filter remove | Out-Null
@@ -96,11 +129,11 @@ if (Test-Path $wtu) {
 
 Write-Host ""
 Write-Host "=== NOW DO THIS IN THE WTU WINDOW ===" -ForegroundColor Cyan
-Write-Host "  a) Hardware type: choose [Camera built-in Wi-Fi]" -ForegroundColor Cyan
-Write-Host "     (NOT wired LAN and NOT wireless LAN - those never reach the camera)" -ForegroundColor Cyan
-Write-Host "  b) Click Next until your camera appears, then connect" -ForegroundColor Cyan
-Write-Host "  c) Destination folder: anything, just get connected" -ForegroundColor Cyan
-Write-Host "  d) Once WTU is connected (it may show a file list), come back here" -ForegroundColor Cyan
+Write-Host "  page 2/16  Hardware type: choose [Camera built-in Wi-Fi]" -ForegroundColor Cyan
+Write-Host "             (NOT wired LAN and NOT wireless LAN)" -ForegroundColor Cyan
+Write-Host "  page 3/16  Operation: choose [Add / edit profiles]" -ForegroundColor Cyan
+Write-Host "             NOT [Select destination folder] - that one only sets a folder" -ForegroundColor Cyan
+Write-Host "  then follow the wizard until WTU actually connects to the camera" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Capture keeps running until you press Enter. No time limit." -ForegroundColor Green
 Write-Host ""
