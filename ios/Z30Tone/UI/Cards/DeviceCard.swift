@@ -38,7 +38,8 @@ struct DeviceCard: View {
                 Text(
                     "1. 手机「设置 → 无线局域网」连上相机的 Wi-Fi（形如 NIKON_Z_30_xxxxx）\n"
                         + "2. 相机菜单：连接到 PC → 连接到计算机，并调长熄屏时间\n"
-                        + "3. 电脑上的 Wireless Transmitter Utility 先退出，它会占住会话"
+                        + "3. 电脑上的 Wireless Transmitter Utility 先退出，它会占住会话\n"
+                        + "4. 第一次点连接时，iOS 会问「是否允许查找本地网络设备」，必须点允许"
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)

@@ -48,6 +48,12 @@ private struct ConnectResult: Sendable {
     let slots: [CameraSlot]
 }
 
+/// 一次写入的结果：比对结论 + 写入前的原始字节。
+private struct WriteOutcome: Sendable {
+    let summary: String
+    let original: Data
+}
+
 /// iOS 端的单一状态源。对标安卓 `AppViewModel`，但去掉 USB 相关（设备/槽位/写入/备份），
 /// 把出口换成「导出 .z30」。
 @MainActor
@@ -231,7 +237,12 @@ final class AppModel: ObservableObject {
                 self.busyText = ""
                 self.connected = false
                 self.slots = []
-                self.message = error.localizedDescription
+                var text = error.localizedDescription
+                if let ptp = error as? PtpIpError, case .handshake = ptp {
+                    text += "\n\n这个主机身份来自一次电脑端配对，只对那台相机有效。"
+                        + "换一台相机需要重新配对，0.3.1 会内置相机端的 PIN 配对流程。"
+                }
+                self.message = text
                 self.log("连接失败：\(error.localizedDescription)")
                 cam.close()
             }
@@ -289,11 +300,11 @@ final class AppModel: ObservableObject {
 
         Task {
             do {
-                let result = try await Task.detached(priority: .userInitiated) { () -> (summary: String, original: Data) in
+                let result = try await Task.detached(priority: .userInitiated) { () -> WriteOutcome in
                     let original = try cam.getPictCtrl(slot: slot)
                     try cam.setPictCtrl(slot: slot, payload: payload)
                     let readBack = try cam.getPictCtrl(slot: slot)
-                    return (Payload.diff(payload, readBack).summary, original)
+                    return WriteOutcome(summary: Payload.diff(payload, readBack).summary, original: original)
                 }.value
 
                 if result.original.count == 614 {
