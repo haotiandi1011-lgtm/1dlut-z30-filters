@@ -89,8 +89,9 @@ Write-Host "3/5  Start capture ..."
 $stamp = Get-Date -Format "HHmmss"
 $etl = "$out\wtu-$stamp.etl"
 $pcap = "$out\wtu-$stamp.pcap"
-foreach ($f in (Get-ChildItem $out -Filter "*.etl" -ErrorAction SilentlyContinue)) { Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue }
-foreach ($f in (Get-ChildItem $out -Filter "*.pcap" -ErrorAction SilentlyContinue)) { Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue }
+# Do NOT delete other captures here. File names are unique, and a second run
+# used to wipe the first run's data (that is exactly how one pairing capture was
+# lost). Leaving old files costs a few hundred KB and saves the experiment.
 
 pktmon start --capture --pkt-size 0 --file-size 256 --file-name $etl
 if ($LASTEXITCODE -ne 0) {
